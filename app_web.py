@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 # CONFIGURAÇÃO DE TELA
 st.set_page_config(page_title="Barber Agendamento", page_icon="💈", layout="centered")
 
-# Estilização dos botões para Mobile (Grandes e Azuis)
+# CSS para botões grandes (Estilo App Mobile)
 st.markdown("""
     <style>
     div.stButton > button:first-child {
@@ -18,13 +18,14 @@ st.markdown("""
         background-color: #007bff;
         color: white;
     }
-    /* Estilo específico para o botão de formulário */
+    /* Deixa o botão de continuar verde para destacar */
     .stFormSubmitButton > button {
         background-color: #28a745 !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
+# CONFIGURAÇÕES DE ACESSO (Mantenha suas chaves aqui)
 FILE_KEY = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 AGENDAS = {
@@ -43,41 +44,39 @@ service = conectar()
 
 st.title("💈 Sistema de Agendamento")
 
-# Inicializa o estado se não existir
-if 'passo_liberado' not in st.session_state:
-    st.session_state.passo_liberado = False
-
-# FORMULÁRIO DE ENTRADA (Evita o pedido de 'Enter')
-with st.form("identificacao"):
-    st.write("### 👋 Comece por aqui")
-    nome = st.text_input("Seu Nome ou Apelido")
-    celular = st.text_input("Celular com DDD (apenas números)")
-    enviar = st.form_submit_button("CONTINUAR PARA HORÁRIOS")
+# --- PASSO 1: IDENTIFICAÇÃO COM BOTÃO ---
+# O formulário impede que o site peça "Enter" o tempo todo
+with st.form("meu_formulario"):
+    st.write("### 👋 Dados do Cliente")
+    nome_input = st.text_input("Seu Nome ou Apelido")
+    celular_input = st.text_input("Celular com DDD (apenas números)")
     
-    if enviar:
-        if len(celular) >= 10 and nome:
-            st.session_state.passo_liberado = True
-            st.session_state.nome_cliente = nome
-            st.session_state.cel_cliente = celular
-        else:
-            st.error("Por favor, preencha nome e celular corretamente.")
+    # Este é o botão que você pediu!
+    botao_continuar = st.form_submit_button("CLIQUE AQUI PARA CONTINUAR")
 
-# SEÇÃO DE HORÁRIOS (Só aparece após o botão acima ser clicado)
-if st.session_state.passo_liberado:
+# --- PASSO 2: LIBERAÇÃO DOS HORÁRIOS ---
+if botao_continuar:
+    if len(celular_input) >= 10 and nome_input:
+        st.session_state.pode_agendar = True
+        st.session_state.nome_final = nome_input
+        st.session_state.cel_final = celular_input
+    else:
+        st.error("Preencha seu nome e celular corretamente primeiro!")
+
+# Se o botão foi clicado com sucesso, mostra o resto
+if st.session_state.get('pode_agendar'):
     st.markdown("---")
-    st.success(f"Olá {st.session_state.nome_cliente}! Escolha seu horário abaixo:")
+    st.success(f"Olá {st.session_state.nome_final}! Agora escolha abaixo:")
     
     prof = st.selectbox("Escolha o Profissional", list(AGENDAS.keys()))
     data_sel = st.date_input("Escolha a Data", min_value=datetime.now() + timedelta(days=1))
     
-    # Grade de horários intuitiva
-    st.write("### 🕒 Horários Disponíveis")
+    st.write("### 🕒 Escolha o Horário")
     horarios = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
     cols = st.columns(3)
     
     for i, hora in enumerate(horarios):
         with cols[i % 3]:
-            if st.button(hora, key=f"h_{hora}"):
+            if st.button(hora, key=f"btn_{hora}"):
                 st.balloons()
-                st.success(f"Agendado para {st.session_state.nome_cliente}!")
-                st.info(f"Barbeiro: {prof} | Data: {data_sel.strftime('%d/%m')} às {hora}")
+                st.success(f"Agendado às {hora}!")
