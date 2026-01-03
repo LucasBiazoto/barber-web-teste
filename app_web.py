@@ -3,9 +3,10 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# CONFIGURAÇÃO DE ESTILO PARA TELEMÓVEL/TABLET
+# CONFIGURAÇÃO PARA DISPOSITIVOS MÓVEIS
 st.set_page_config(page_title="Barber Agendamento", page_icon="💈", layout="centered")
 
+# CSS para botões grandes e fáceis de clicar
 st.markdown("""
     <style>
     div.stButton > button:first-child {
@@ -13,7 +14,6 @@ st.markdown("""
         height: 3.5em;
         font-size: 18px;
         font-weight: bold;
-        margin-bottom: 10px;
         border-radius: 12px;
         background-color: #007bff;
         color: white;
@@ -21,7 +21,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# CONFIGURAÇÕES DE ACESSO
 FILE_KEY = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 AGENDAS = {
@@ -38,34 +37,30 @@ def conectar():
 
 service = conectar()
 
-st.title("💈 Sistema de Agendamento")
+st.title("💈 Agendamento Barber")
 
-tab1, tab2 = st.tabs(["📅 Novo Horário", "🔍 Meus Agendamentos"])
+nome = st.text_input("Seu Nome")
+celular = st.text_input("Celular (DDD + Número)")
 
-with tab1:
-    nome = st.text_input("Seu Nome")
-    celular = st.text_input("Telemóvel (DDD + Número)")
+if celular and len(celular) >= 10:
+    st.write("---")
+    prof = st.selectbox("Selecione o Barbeiro", list(AGENDAS.keys()))
+    data_sel = st.date_input("Escolha a Data", min_value=datetime.now() + timedelta(days=1))
     
-    if celular and len(celular) >= 10:
-        st.success("Verificado! Escolha os detalhes abaixo:")
-        
-        prof = st.selectbox("Selecione o Barbeiro", list(AGENDAS.keys()))
-        data_sel = st.date_input("Escolha a Data", min_value=datetime.now() + timedelta(days=1))
-        
-        dias_pt = {"Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira", 
-                   "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"}
-        st.write(f"Dia selecionado: **{dias_pt[data_sel.strftime('%A')]}**")
+    # Tradução para Português
+    dias_pt = {"Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira", 
+               "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"}
+    st.write(f"Dia selecionado: **{dias_pt[data_sel.strftime('%A')]}**")
 
-        st.write("### 🕒 Horários Disponíveis")
-        # Grade de horários intuitiva para toque (3 colunas)
-        horas = ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
-        cols = st.columns(3)
-        
-        for idx, h in enumerate(horas):
-            with cols[idx % 3]:
-                if st.button(h):
-                    st.balloons()
-                    st.success(f"Agendado! {nome}, esperamos por você às {h} no dia {data_sel.strftime('%d/%m')}.")
-
-with tab2:
-    st.write("Digite o seu número para consultar horários marcados.")
+    st.write("### 🕒 Escolha o Horário:")
+    
+    # LISTA DE HORÁRIOS - Criando a grade de 3 colunas para Mobile
+    horarios = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+    cols = st.columns(3)
+    
+    for i, hora in enumerate(horarios):
+        with cols[i % 3]:
+            if st.button(hora, key=hora):
+                # Mensagem de sucesso ao clicar no horário
+                st.success(f"✅ Agendado! {nome} com {prof} às {hora} do dia {data_sel.strftime('%d/%m')}")
+                st.balloons()
