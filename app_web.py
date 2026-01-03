@@ -3,10 +3,10 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# CONFIGURAÇÃO PARA DISPOSITIVOS MÓVEIS
+# CONFIGURAÇÃO DE TELA
 st.set_page_config(page_title="Barber Agendamento", page_icon="💈", layout="centered")
 
-# CSS para botões grandes e fáceis de clicar
+# CSS para botões grandes (Estilo App Mobile)
 st.markdown("""
     <style>
     div.stButton > button:first-child {
@@ -21,6 +21,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# CONFIGURAÇÕES DE ACESSO
 FILE_KEY = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 AGENDAS = {
@@ -33,34 +34,41 @@ def conectar():
     try:
         creds = service_account.Credentials.from_service_account_file(FILE_KEY, scopes=SCOPES)
         return build('calendar', 'v3', credentials=creds)
-    except: return None
+    except:
+        return None
 
 service = conectar()
 
 st.title("💈 Agendamento Barber")
 
-nome = st.text_input("Seu Nome")
-celular = st.text_input("Celular (DDD + Número)")
+# Entrada de dados do cliente
+nome = st.text_input("Seu Nome ou Apelido")
+celular = st.text_input("Celular com DDD (apenas números)")
 
 if celular and len(celular) >= 10:
-    st.write("---")
-    prof = st.selectbox("Selecione o Barbeiro", list(AGENDAS.keys()))
+    st.markdown("---")
+    
+    # Seleção de Profissional e Data
+    prof = st.selectbox("Escolha o Profissional", list(AGENDAS.keys()))
     data_sel = st.date_input("Escolha a Data", min_value=datetime.now() + timedelta(days=1))
     
-    # Tradução para Português
-    dias_pt = {"Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira", 
-               "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"}
-    st.write(f"Dia selecionado: **{dias_pt[data_sel.strftime('%A')]}**")
+    dias_pt = {
+        "Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira", 
+        "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"
+    }
+    dia_nome = dias_pt.get(data_sel.strftime('%A'), data_sel.strftime('%A'))
+    st.write(f"Dia selecionado: **{dia_nome}**")
 
     st.write("### 🕒 Escolha o Horário:")
     
-    # LISTA DE HORÁRIOS - Criando a grade de 3 colunas para Mobile
+    # Grade de horários 3x3 para facilitar no celular
     horarios = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
     cols = st.columns(3)
     
     for i, hora in enumerate(horarios):
         with cols[i % 3]:
-            if st.button(hora, key=hora):
-                # Mensagem de sucesso ao clicar no horário
-                st.success(f"✅ Agendado! {nome} com {prof} às {hora} do dia {data_sel.strftime('%d/%m')}")
+            # O segredo é o 'key' ser único para cada botão
+            if st.button(hora, key=f"btn_{hora}"):
+                st.success(f"✅ Horário Reservado!")
                 st.balloons()
+                st.info(f"Confirmado: {nome} com {prof} às {hora} do dia {data_sel.strftime('%d/%m')}.")
