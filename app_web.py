@@ -3,36 +3,39 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# CONFIGURAÇÃO DE TELA
-st.set_page_config(page_title="Barber Agendamento", page_icon="💈", layout="centered")
+# CONFIGURAÇÃO DA PÁGINA
+st.set_page_config(
+    page_title="Barber Agendamento",
+    page_icon="💈",
+    layout="centered"
+)
 
-# CSS para botões grandes e fáceis de clicar no celular
+# CSS – Botões grandes (mobile friendly)
 st.markdown("""
-    <style>
-    div.stButton > button:first-child {
-        width: 100%;
-        height: 3.5em;
-        font-size: 18px;
-        font-weight: bold;
-        border-radius: 12px;
-        background-color: #007bff;
-        color: white;
-    }
-    /* Estilo para o botão de Continuar (Verde) */
-    .stFormSubmitButton > button {
-        background-color: #28a745 !important;
-        width: 100%;
-        height: 3.5em;
-        color: white !important;
-        font-weight: bold;
-        border-radius: 12px;
-    }
-    </style>
+<style>
+div.stButton > button:first-child {
+    width: 100%;
+    height: 3.5em;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 12px;
+}
+
+.stFormSubmitButton > button {
+    background-color: #28a745 !important;
+    color: white !important;
+    width: 100%;
+    height: 3.5em;
+    font-size: 18px;
+    border-radius: 12px;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# CONFIGURAÇÕES DE ACESSO
+# GOOGLE CALENDAR
 FILE_KEY = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/calendar']
+
 AGENDAS = {
     "Bruno": "b2f33326cb9d42ddf65423eed8332d70be96f8b21f18a902093ea432d1d523f5@group.calendar.google.com",
     "Duda": "7e95af6d94ea5bcf73f15c8dbc4ddc29fe544728219617478566bca73d05d7d4@group.calendar.google.com",
@@ -41,52 +44,66 @@ AGENDAS = {
 
 def conectar():
     try:
-        creds = service_account.Credentials.from_service_account_file(FILE_KEY, scopes=SCOPES)
+        creds = service_account.Credentials.from_service_account_file(
+            FILE_KEY, scopes=SCOPES
+        )
         return build('calendar', 'v3', credentials=creds)
-    except: return None
+    except:
+        return None
 
 service = conectar()
 
+# TÍTULO
 st.title("💈 Sistema de Agendamento")
 
-# --- PASSO 1: FORMULÁRIO DE IDENTIFICAÇÃO ---
-# O 'st.form' remove o "Press Enter to apply" automaticamente
-with st.form("identificacao_cliente"):
-    st.write("### 👋 Dados de Acesso")
+# ===============================
+# PASSO 1 — FORMULÁRIO
+# ===============================
+with st.form("dados_cliente"):
+    st.subheader("👋 Identificação")
+    
     nome = st.text_input("Seu Nome ou Apelido")
     celular = st.text_input("Celular com DDD (apenas números)")
     
-    # Botão de submissão do formulário
-    avancar = st.form_submit_button("CONTINUAR PARA AGENDAMENTO")
+    continuar = st.form_submit_button("CONTINUAR")
 
-# --- PASSO 2: EXIBIÇÃO DOS HORÁRIOS ---
-# O conteúdo abaixo só aparece após clicar no botão acima
-if avancar:
-    if len(celular) >= 10 and nome:
-        st.session_state.pode_agendar = True
-        st.session_state.nome_cliente = nome
-        st.session_state.cel_cliente = celular
+# ===============================
+# VALIDAÇÃO
+# ===============================
+if continuar:
+    if nome.strip() and celular.isdigit() and len(celular) >= 10:
+        st.session_state["nome"] = nome
+        st.session_state["celular"] = celular
+        st.session_state["liberado"] = True
     else:
-        st.error("Por favor, preencha o nome e o celular corretamente.")
+        st.error("Preencha o nome e um celular válido com DDD.")
 
-# Se os dados foram validados, mostra as opções
-if st.session_state.get('pode_agendar'):
+# ===============================
+# PASSO 2 — AGENDAMENTO
+# ===============================
+if st.session_state.get("liberado"):
     st.markdown("---")
-    st.success(f"Olá {st.session_state.nome_cliente}! Escolha os detalhes abaixo:")
-    
-    prof = st.selectbox("Escolha o Profissional", list(AGENDAS.keys()))
-    data_sel = st.date_input("Escolha a Data", min_value=datetime.now() + timedelta(days=1))
-    
-    dias_pt = {"Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira", 
-               "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"}
-    st.write(f"Dia selecionado: **{dias_pt.get(data_sel.strftime('%A'))}**")
+    st.success(f"Olá, {st.session_state['nome']} 👋")
 
-    st.write("### 🕒 Escolha o Horário:")
-    horarios = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+    profissional = st.selectbox("Escolha o profissional", list(AGENDAS.keys()))
+    data = st.date_input(
+        "Escolha a data",
+        min_value=datetime.now().date() + timedelta(days=1)
+    )
+
+    st.write("### 🕒 Escolha o horário")
+    horarios = [
+        "09:00", "10:00", "11:00",
+        "13:00", "14:00", "15:00",
+        "16:00", "17:00", "18:00"
+    ]
+
     cols = st.columns(3)
-    
     for i, hora in enumerate(horarios):
         with cols[i % 3]:
-            if st.button(hora, key=f"btn_{hora}"):
-                st.balloons()
-                st.success(f"✅ Agendado para {st.session_state.nome_cliente} às {hora}!")
+            if st.button(hora):
+                st.success(
+                    f"✅ Agendamento confirmado!\n\n"
+                    f"📅 {data.strftime('%d/%m/%Y')} às {hora}\n"
+                    f"✂️ {profissional}"
+                )
