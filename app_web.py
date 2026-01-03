@@ -4,8 +4,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import json
 
-# 1. CONFIGURAÇÃO DE SERVIÇOS E TEMPOS (OCULTOS)
-# Corte: 45min | Barba: 30min | Outros: 60min
+# 1. DEFINIÇÃO DE SERVIÇOS E TEMPOS (OCULTOS)
 SERVICOS = {
     "Corte": 45,
     "Corte e Barba": 60,
@@ -26,11 +25,22 @@ def conectar():
     try:
         with open('credentials.json') as f:
             info = json.load(f)
-        # Limpeza automática da chave para evitar o erro de assinatura
-        info['private_key'] = info['private_key'].replace('\\n', '\n')
-        creds = service_account.Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/calendar'])
+        
+        # LIMPEZA DUPLA DA CHAVE: Resolve definitivamente o erro 'Invalid JWT Signature'
+        key = info['private_key']
+        if "\\n" in key:
+            key = key.replace("\\n", "\n")
+        
+        # Garante que não existam espaços em branco extras antes ou depois da chave
+        info['private_key'] = key.strip()
+        
+        creds = service_account.Credentials.from_service_account_info(
+            info, 
+            scopes=['https://www.googleapis.com/auth/calendar']
+        )
         return build('calendar', 'v3', credentials=creds)
-    except:
+    except Exception as e:
+        st.error(f"Erro na conexão interna: {e}")
         return None
 
 service = conectar()
@@ -45,50 +55,47 @@ tab1, tab2 = st.tabs(["📅 Novo Horário", "🔍 Meus Horários"])
 
 with tab1:
     if not st.session_state.liberado:
-        with st.form("cadastro"):
-            st.write("### 👋 Olá! Informe seus dados:")
-            nome = st.text_input("Seu Nome ou Apelido")
-            celular = st.text_input("Celular com DDD (apenas números)")
-            senha = st.text_input("Crie uma Senha (necessária para cancelar)", type="password")
-            if st.form_submit_button("ESCOLHER BARBEIRO E SERVIÇO"):
+        with st.form("registro"):
+            st.write("### 👋 Seja bem-vindo!")
+            nome = st.text_input("Seu Nome")
+            celular = st.text_input("Celular (DDD + Número)")
+            senha = st.text_input("Crie uma Senha (para cancelar depois)", type="password")
+            if st.form_submit_button("ESCOLHER SERVIÇO"):
                 if nome and celular and senha:
                     st.session_state.update({"liberado": True, "nome": nome, "cel": celular, "senha": senha})
                     st.rerun()
                 else:
-                    st.error("Por favor, preencha todos os campos!")
+                    st.warning("Preencha todos os campos para continuar.")
     else:
         st.write(f"### Olá, {st.session_state.nome}!")
         
-        c1, c2 = st.columns(2)
-        with c1:
-            prof = st.selectbox("Selecione o Profissional", list(AGENDAS.keys()))
-        with c2:
-            serv_escolhido = st.selectbox("Selecione o Serviço", list(SERVICOS.keys()))
+        col1, col2 = st.columns(2)
+        with col1:
+            prof = st.selectbox("Profissional", list(AGENDAS.keys()))
+        with col2:
+            servico = st.selectbox("Serviço", list(SERVICOS.keys()))
             
         data_sel = st.date_input("Escolha a Data", min_value=datetime.now().date() + timedelta(days=1))
         
-        # Tradução manual simples do dia da semana
-        dias = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
-        st.write(f"Dia da semana: **{dias[data_sel.weekday()]}**")
+        # Tradução simples para português
+        dias_pt = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+        st.write(f"Dia selecionado: **{dias_pt[data_sel.weekday()]}**")
 
         st.write("---")
-        st.write("### Horários Disponíveis:")
         horas = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
         cols = st.columns(3)
         
         for i, h in enumerate(horas):
             with cols[i % 3]:
-                if st.button(h, key=f"btn_{h}"):
-                    # Cálculo automático da duração
-                    minutos = SERVICOS[serv_escolhido]
+                if st.button(h, key=f"h_{h}"):
+                    # Cálculo de duração baseado no serviço selecionado
+                    minutos = SERVICOS[servico]
                     inicio = datetime.strptime(f"{data_sel} {h}", "%Y-%m-%d %H:%M")
                     fim = inicio + timedelta(minutes=minutos)
                     
-                    detalhes = f"Serviço: {serv_escolhido} | Tel: {st.session_state.cel} | Senha: {st.session_state.senha}"
-                    
                     evento = {
-                        'summary': f"{serv_escolhido}: {st.session_state.nome}",
-                        'description': detalhes,
+                        'summary': f"{servico}: {st.session_state.nome}",
+                        'description': f"Contato: {st.session_state.cel} | Senha: {st.session_state.senha}",
                         'start': {'dateTime': inicio.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                         'end': {'dateTime': fim.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                     }
@@ -96,11 +103,10 @@ with tab1:
                     try:
                         service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
                         st.balloons()
-                        st.success(f"✅ Sucesso! Agendado às {h}. Duração reservada: {minutos}min.")
+                        st.success(f"✅ Agendado! {servico} com {prof} às {h}.")
                     except Exception as e:
-                        st.error(f"Erro ao salvar: {e}")
+                        st.error(f"Erro ao salvar: Verifique se o bot tem acesso à agenda do {prof}.")
 
 with tab2:
-    st.write("### 🔍 Consultar meus horários")
-    st.info("Para sua segurança, informe os dados abaixo para ver ou cancelar seus horários.")
-    # Lógica de cancelamento pode ser adicionada aqui no futuro
+    st.write("### 🔍 Meus Agendamentos")
+    st.info("Aqui você poderá conferir seus horários em breve.")
