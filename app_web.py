@@ -22,8 +22,9 @@ st.set_page_config(page_title="Barber Agendamento", page_icon="💈")
 
 def conectar():
     try:
-        # Puxa a chave bruta e limpa aspas e quebras de linha
+        # Puxa a chave bruta dos Secrets
         raw_key = st.secrets["private_key"]
+        # Limpa aspas extras e converte \n em quebras de linha reais
         clean_key = raw_key.strip().strip('"').strip("'").replace('\\n', '\n')
         
         info = {
@@ -39,19 +40,19 @@ def conectar():
         creds = service_account.Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/calendar'])
         return build('calendar', 'v3', credentials=creds)
     except Exception as e:
-        st.error(f"Erro na autenticação: {e}")
+        st.error(f"Erro na conexão: {e}")
         return None
 
 service = conectar()
 
-st.title("💈 Sistema de Agendamento")
+st.title("💈 Barber Agendamento")
 
 tab1, tab2 = st.tabs(["📅 Novo Horário", "🔍 Meus Horários"])
 
 with tab1:
     nome = st.text_input("Seu Nome")
     celular = st.text_input("Celular (DDD + Número)")
-    senha = st.text_input("Crie uma Senha", type="password")
+    senha = st.text_input("Senha (para cancelar depois)", type="password")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -61,6 +62,7 @@ with tab1:
         
     data_sel = st.date_input("Data", min_value=datetime.now().date() + timedelta(days=1))
     
+    st.write("---")
     st.write("### Horários Disponíveis:")
     horas = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
     cols = st.columns(3)
@@ -71,21 +73,21 @@ with tab1:
                 if nome and service:
                     inicio = datetime.strptime(f"{data_sel} {h}", "%Y-%m-%d %H:%M")
                     fim = inicio + timedelta(minutes=SERVICOS[servico])
+                    
                     evento = {
                         'summary': f"{servico}: {nome}",
                         'description': f"TEL:{celular}|PWD:{senha}",
                         'start': {'dateTime': inicio.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                         'end': {'dateTime': fim.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                     }
+                    
                     try:
                         service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                        st.success("✅ Agendado!")
+                        st.success(f"✅ Reservado: {servico} com {prof} às {h}!")
                         st.balloons()
                     except Exception as e:
-                        st.error(f"Erro: {e}")
+                        st.error(f"Erro ao salvar: {e}")
 
 with tab2:
     st.write("### 🔍 Consultar Agendamentos")
-    cel_busca = st.text_input("Celular cadastrado")
-    if st.button("BUSCAR"):
-        st.info("Funcionalidade de busca ativa.")
+    st.info("Digite seus dados para ver horários marcados.")
