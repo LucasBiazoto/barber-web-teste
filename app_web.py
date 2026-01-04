@@ -3,7 +3,15 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# 1. IDs das Agendas
+# 1. CONFIGURAÇÕES
+SERVICOS = {
+    "Corte": 45,
+    "Corte e Barba": 60,
+    "Corte e Luzes": 60,
+    "Só Barba": 30,
+    "Corte Feminino": 60
+}
+
 AGENDAS = {
     "Bruno": "b2f33326cb9d42ddf65423eed8332d70be96f8b21f18a902093ea432d1d523f5@group.calendar.google.com",
     "Duda": "7e95af6d94ea5bcf73f15c8dbc4ddc29fe544728219617478566bca73d05d7d4@group.calendar.google.com",
@@ -14,10 +22,8 @@ st.set_page_config(page_title="Barber Agendamento", page_icon="💈")
 
 def conectar():
     try:
-        # Puxa a chave bruta dos Secrets
+        # Puxa a chave bruta e limpa aspas e quebras de linha
         raw_key = st.secrets["private_key"]
-        
-        # LIMPEZA CRÍTICA: Remove aspas extras e garante que as quebras de linha funcionem
         clean_key = raw_key.strip().strip('"').strip("'").replace('\\n', '\n')
         
         info = {
@@ -38,28 +44,48 @@ def conectar():
 
 service = conectar()
 
-st.title("💈 Agendamento")
+st.title("💈 Sistema de Agendamento")
 
-# Interface simplificada
-nome = st.text_input("Seu Nome")
-prof = st.selectbox("Barbeiro", list(AGENDAS.keys()))
-data_sel = st.date_input("Data", min_value=datetime.now().date() + timedelta(days=1))
-hora_sel = st.selectbox("Horário", ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"])
+tab1, tab2 = st.tabs(["📅 Novo Horário", "🔍 Meus Horários"])
 
-if st.button("CONFIRMAR"):
-    if nome and service:
-        inicio = datetime.strptime(f"{data_sel} {hora_sel}", "%Y-%m-%d %H:%M")
-        fim = inicio + timedelta(minutes=45)
+with tab1:
+    nome = st.text_input("Seu Nome")
+    celular = st.text_input("Celular (DDD + Número)")
+    senha = st.text_input("Crie uma Senha", type="password")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        prof = st.selectbox("Barbeiro", list(AGENDAS.keys()))
+    with col2:
+        servico = st.selectbox("Serviço", list(SERVICOS.keys()))
         
-        evento = {
-            'summary': f"Corte: {nome}",
-            'start': {'dateTime': inicio.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
-            'end': {'dateTime': fim.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
-        }
-        
-        try:
-            service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-            st.success("✅ Agendado com sucesso!")
-            st.balloons()
-        except Exception as e:
-            st.error(f"Erro ao salvar na agenda: {e}")
+    data_sel = st.date_input("Data", min_value=datetime.now().date() + timedelta(days=1))
+    
+    st.write("### Horários Disponíveis:")
+    horas = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+    cols = st.columns(3)
+    
+    for i, h in enumerate(horas):
+        with cols[i % 3]:
+            if st.button(h, key=f"h_{h}"):
+                if nome and service:
+                    inicio = datetime.strptime(f"{data_sel} {h}", "%Y-%m-%d %H:%M")
+                    fim = inicio + timedelta(minutes=SERVICOS[servico])
+                    evento = {
+                        'summary': f"{servico}: {nome}",
+                        'description': f"TEL:{celular}|PWD:{senha}",
+                        'start': {'dateTime': inicio.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
+                        'end': {'dateTime': fim.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
+                    }
+                    try:
+                        service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
+                        st.success("✅ Agendado!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
+
+with tab2:
+    st.write("### 🔍 Consultar Agendamentos")
+    cel_busca = st.text_input("Celular cadastrado")
+    if st.button("BUSCAR"):
+        st.info("Funcionalidade de busca ativa.")
