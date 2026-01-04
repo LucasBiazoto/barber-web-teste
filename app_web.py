@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# 1. CONFIGURAÇÕES
+# CONFIGURAÇÕES DE SERVIÇOS
 SERVICOS = {
     "Corte": 45,
     "Corte e Barba": 60,
@@ -22,10 +22,9 @@ st.set_page_config(page_title="Barber Agendamento", page_icon="💈")
 
 def conectar():
     try:
-        # Puxa a chave bruta dos Secrets
+        # Puxa a chave bruta e trata as quebras de linha
         raw_key = st.secrets["private_key"]
-        # Limpa aspas extras e converte \n em quebras de linha reais
-        clean_key = raw_key.strip().strip('"').strip("'").replace('\\n', '\n')
+        clean_key = raw_key.strip().strip('"').replace('\\n', '\n')
         
         info = {
             "type": "service_account",
@@ -52,7 +51,6 @@ tab1, tab2 = st.tabs(["📅 Novo Horário", "🔍 Meus Horários"])
 with tab1:
     nome = st.text_input("Seu Nome")
     celular = st.text_input("Celular (DDD + Número)")
-    senha = st.text_input("Senha (para cancelar depois)", type="password")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -76,18 +74,17 @@ with tab1:
                     
                     evento = {
                         'summary': f"{servico}: {nome}",
-                        'description': f"TEL:{celular}|PWD:{senha}",
+                        'description': f"TEL:{celular}",
                         'start': {'dateTime': inicio.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                         'end': {'dateTime': fim.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                     }
                     
                     try:
                         service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                        st.success(f"✅ Reservado: {servico} com {prof} às {h}!")
+                        st.success(f"✅ Agendado!")
                         st.balloons()
                     except Exception as e:
                         st.error(f"Erro ao salvar: {e}")
 
 with tab2:
-    st.write("### 🔍 Consultar Agendamentos")
-    st.info("Digite seus dados para ver horários marcados.")
+    st.write("🔍 Funcionalidade de consulta em breve.")
