@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES DE SERVIÇOS
 SERVICOS = {
     "Corte": 45,
     "Corte e Barba": 60,
@@ -22,7 +22,7 @@ st.set_page_config(page_title="Barber Agendamento", page_icon="💈")
 
 def conectar():
     try:
-        # Puxa a chave e garante que as quebras de linha (\n) sejam reais
+        # Puxa a chave bruta e remove aspas extras
         raw_key = st.secrets["private_key"]
         clean_key = raw_key.strip().strip('"').strip("'").replace('\\n', '\n')
         
@@ -39,7 +39,7 @@ def conectar():
         )
         return build('calendar', 'v3', credentials=creds)
     except Exception as e:
-        st.error(f"Erro na conexão: {e}")
+        st.error(f"Erro de credenciais: {e}")
         return None
 
 service = conectar()
@@ -50,9 +50,9 @@ tab1, tab2 = st.tabs(["📅 Novo Horário", "🔍 Meus Horários"])
 
 with tab1:
     nome = st.text_input("Seu Nome")
-    celular = st.text_input("Celular (com DDD)")
-    # NOVO: CAMPO DE SENHA REESTABELECIDO
-    senha = st.text_input("Crie uma Senha (para cancelar depois)", type="password")
+    celular = st.text_input("Celular (DDD + Número)")
+    # CAMPO DE SENHA REESTABELECIDO
+    senha = st.text_input("Crie uma Senha (para cancelamentos)", type="password")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -63,33 +63,32 @@ with tab1:
     data_sel = st.date_input("Data", min_value=datetime.now().date())
     
     st.write("---")
-    st.write("### Escolha o Horário:")
+    st.write("### Horários Disponíveis:")
     horas = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
     cols = st.columns(3)
     
     for i, h in enumerate(horas):
         with cols[i % 3]:
-            if st.button(h, key=f"btn_{h}"):
-                if not nome or not celular or not senha:
-                    st.warning("⚠️ Por favor, preencha Nome, Celular e Senha.")
+            if st.button(h, key=f"h_{h}"):
+                if not (nome and celular and senha):
+                    st.warning("Preencha Nome, Celular e Senha primeiro!")
                 elif service:
                     try:
                         inicio = datetime.strptime(f"{data_sel} {h}", "%Y-%m-%d %H:%M")
                         fim = inicio + timedelta(minutes=SERVICOS[servico])
                         
-                        # Salvamos a senha na descrição para conferência posterior
                         evento = {
                             'summary': f"{servico}: {nome}",
-                            'description': f"TEL: {celular} | PWD: {senha}",
+                            'description': f"TEL: {celular} | SENHA: {senha}",
                             'start': {'dateTime': inicio.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                             'end': {'dateTime': fim.strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                         }
                         
                         service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                        st.success(f"✅ Agendado com sucesso para às {h}!")
+                        st.success(f"✅ Agendado para {h}!")
                         st.balloons()
                     except Exception as e:
-                        st.error(f"Erro ao agendar: {e}")
+                        st.error(f"Erro ao salvar: {e}")
 
 with tab2:
-    st.info("Aqui você poderá consultar ou cancelar seus horários usando seu celular e senha.")
+    st.info("Em breve: Consulte ou cancele seus horários aqui.")
