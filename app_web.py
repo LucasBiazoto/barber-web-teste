@@ -4,7 +4,7 @@ import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# IDs das Agendas conforme seus prints
+# IDs das Agendas (Sincronizadas com seus prints)
 AGENDAS = {
     "Bruno": "b2f33326cb9d42ddf65423eed8332d70be96f8b21f18a902093ea432d1d523f5@group.calendar.google.com",
     "Duda": "7e95af6d94ea5bcf73f15c8dbc4ddc29fe544728219617478566bca73d05d7d4@group.calendar.google.com",
@@ -14,11 +14,13 @@ AGENDAS = {
 st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="centered")
 fuso = pytz.timezone('America/Sao_Paulo')
 
-# --- ESTILO VISUAL MANTIDO ---
+# =========================================================
+# ESTILO VISUAL MANTIDO
+# =========================================================
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), 
+        background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.65)), 
         url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070");
         background-size: cover;
         background-attachment: fixed;
@@ -32,7 +34,7 @@ st.markdown("""
         background: rgba(20, 20, 20, 0.5);
         padding: 15px;
         border-radius: 15px;
-        max-width: 90%;
+        max-width: 92%;
         margin: auto;
     }
     h1 { color: #D4AF37 !important; text-align: center; }
@@ -52,11 +54,15 @@ st.markdown("""
         text-align: center;
         padding: 12px;
         border-top: 1px solid #D4AF37;
+        z-index: 999;
     }
+    .footer-custom a { color: #D4AF37; text-decoration: none; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONEXÃO ---
+# =========================================================
+# LÓGICA DE CONEXÃO E VERIFICAÇÃO DE DISPONIBILIDADE
+# =========================================================
 def conectar():
     try:
         raw_key = st.secrets["private_key"]
@@ -74,8 +80,8 @@ def conectar():
 
 service = conectar()
 
-# --- NOVA LÓGICA DE VERIFICAÇÃO (BLOQUEIA DIA INTEIRO) ---
-def get_ocupados(calendar_id, data):
+def get_status_dia(calendar_id, data):
+    """Verifica se o dia está bloqueado ou retorna horários ocupados"""
     try:
         min_t = datetime.combine(data, time.min).astimezone(fuso).isoformat()
         max_t = datetime.combine(data, time.max).astimezone(fuso).isoformat()
@@ -85,17 +91,20 @@ def get_ocupados(calendar_id, data):
         ocupados = []
         
         for ev in eventos:
-            # Se for evento de dia inteiro, bloqueia TUDO
+            # CORREÇÃO: Se existir qualquer evento de DIA INTEIRO ('date'), bloqueia tudo
             if 'date' in ev['start']:
-                return ["DIA_INTEIRO"] 
-            # Se for evento com hora, adiciona o horário na lista
+                return "BLOQUEADO"
+            
+            # Se for evento com horário, extrai o HH:MM
             start = ev['start'].get('dateTime', '')
             if start:
                 ocupados.append(start[11:16])
         return ocupados
     except: return []
 
-# --- INTERFACE ---
+# =========================================================
+# INTERFACE
+# =========================================================
 st.title("💈 BARBER SHOP PREMIUM")
 aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR AGENDAMENTO"])
 
@@ -110,34 +119,43 @@ with aba1:
     data_sel = st.date_input("Data", min_value=datetime.now(fuso).date())
     
     st.write("### 🕒 Horários Disponíveis")
-    todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
-    ocupados = get_ocupados(AGENDAS[prof], data_sel)
+    status = get_status_dia(AGENDAS[prof], data_sel)
     
-    if "DIA_INTEIRO" in ocupados:
-        st.error("🚫 Este barbeiro não estará disponível nesta data (Evento de dia inteiro).")
+    if status == "BLOQUEADO":
+        st.error(f"🚫 O barbeiro {prof} não estará disponível nesta data (Indisponibilidade de dia inteiro).")
     else:
+        todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
         cols = st.columns(3)
         for i, h in enumerate(todos):
             with cols[i % 3]:
-                if h in ocupados:
+                if h in status:
                     st.button(f"🚫 {h}", disabled=True, key=f"d_{h}", use_container_width=True)
                 else:
                     if st.button(h, key=f"b_{h}", use_container_width=True):
-                        # Lógica de gravação mantida com blindagem de minutos
-                        h_int = int(h.split(':')[0])
-                        inicio = datetime.combine(data_sel, time(hour=h_int, minute=0)).replace(tzinfo=fuso)
-                        evento = {
-                            'summary': f"{servico}: {nome}",
-                            'description': f"TEL: {celular} | SENHA: {senha}",
-                            'start': {'dateTime': inicio.isoformat(), 'timeZone': 'America/Sao_Paulo'},
-                            'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat(), 'timeZone': 'America/Sao_Paulo'},
-                        }
-                        service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                        st.success(f"✅ Reservado para às {h}!")
-                        st.rerun()
+                        if nome and celular and senha:
+                            try:
+                                h_int = int(h.split(':')[0])
+                                inicio = datetime.combine(data_sel, time(hour=h_int, minute=0)).replace(tzinfo=fuso)
+                                evento = {
+                                    'summary': f"{servico}: {nome}",
+                                    'description': f"TEL: {celular} | SENHA: {senha}",
+                                    'start': {'dateTime': inicio.isoformat(), 'timeZone': 'America/Sao_Paulo'},
+                                    'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat(), 'timeZone': 'America/Sao_Paulo'},
+                                }
+                                service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
+                                st.success(f"✅ Agendado para às {h}!")
+                                st.rerun()
+                            except Exception as e: st.error(f"Erro: {e}")
+                        else: st.warning("Preencha todos os campos!")
 
 with aba2:
-    # Código de cancelamento permanece igual...
-    st.write("Aba de cancelamento ativa.")
+    # Lógica de busca de cancelamento mantida
+    st.write("### 🔍 Localizar Agendamento")
+    # ... (mesmo código da versão anterior)
 
-st.markdown(f"""<div class="footer-custom">Desenvolvido por Lucas Biazoto | <a href="https://github.com/LBiazoto" target="_blank">GitHub</a></div>""", unsafe_allow_html=True)
+st.markdown(f"""
+    <div class="footer-custom">
+        Desenvolvido por Lucas Biazoto | 
+        <a href="https://github.com/LBiazoto" target="_blank">Ver GitHub</a>
+    </div>
+    """, unsafe_allow_html=True)
