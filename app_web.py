@@ -15,25 +15,24 @@ st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="c
 fuso = pytz.timezone('America/Sao_Paulo')
 
 # =========================================================
-# ESTILO VISUAL (CORES: CANCELAR AMARELO / SUCESSO VERDE)
+# ESTILO VISUAL (CANCELAR AMARELO / SUCESSO VERDE)
 # =========================================================
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.65)), 
+        background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
         url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070");
-        background-size: cover;
-        background-attachment: fixed;
+        background-size: cover; background-attachment: fixed;
     }
-    .stMarkdown p, label, .stWidgetLabel { color: white !important; font-weight: bold !important; }
-    div[data-testid="stVerticalBlock"] > div { background: rgba(20, 20, 20, 0.6); border-radius: 15px; padding: 20px; }
-    
-    /* Títulos e Botões Dourados/Amarelos */
+    .stMarkdown p, label, .stWidgetLabel { color: white !important; font-weight: bold !important; text-shadow: 1px 1px 2px #000; }
+    div[data-testid="stVerticalBlock"] > div { background: rgba(10, 10, 10, 0.6); border-radius: 15px; padding: 20px; }
     h1 { color: #D4AF37 !important; text-align: center; }
+    
+    /* Botões Amarelo/Dourado */
     div.stButton > button { background-color: #D4AF37 !important; color: black !important; font-weight: bold; border: none; width: 100%; }
     
     /* Mensagem de Sucesso VERDE */
-    div[data-testid="stNotification"] { background-color: #28a745 !important; color: white !important; }
+    div[data-testid="stNotificationV2"]:has(.st-ae) { background-color: #28a745 !important; color: white !important; }
     
     #MainMenu, footer, header {visibility: hidden;}
     </style>
@@ -55,17 +54,17 @@ service = conectar()
 
 def get_status_dia(calendar_id, data):
     try:
-        # Busca eventos do dia selecionado
+        # Busca estendida para garantir captura de eventos de dia inteiro
         min_t = fuso.localize(datetime.combine(data, time.min)).isoformat()
         max_t = fuso.localize(datetime.combine(data, time.max)).isoformat()
         events = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute().get('items', [])
         
         ocupados = []
         for ev in events:
-            # BLOQUEIO DEFINITIVO DIA INTEIRO (Campo 'date' sem hora)
+            # BLOQUEIO DIA INTEIRO: Verifica se o evento ocupa o dia sem horas definidas
             if 'date' in ev['start']:
                 return "BLOQUEADO"
-            # BLOQUEIO DE HORÁRIOS
+            # BLOQUEIO HORÁRIOS: Captura HH:MM
             start_dt = ev['start'].get('dateTime')
             if start_dt:
                 ocupados.append(datetime.fromisoformat(start_dt).astimezone(fuso).strftime('%H:%M'))
@@ -73,23 +72,23 @@ def get_status_dia(calendar_id, data):
     except: return []
 
 st.title("💈 BARBER SHOP PREMIUM")
-aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR AGENDAMENTO"])
+aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR"])
 
 with aba1:
-    nome = st.text_input("Seu Nome")
+    nome = st.text_input("Nome")
     col1, col2 = st.columns(2)
-    with col1: zap = st.text_input("WhatsApp")
+    with col1: zap = st.text_input("WhatsApp com DDD")
     with col2: senha = st.text_input("Senha", type="password")
     
-    barbeiro = st.selectbox("Escolha o Barbeiro", list(AGENDAS.keys()))
+    barbeiro = st.selectbox("Barbeiro", list(AGENDAS.keys()))
     data_sel = st.date_input("Data", min_value=datetime.now(fuso).date())
     
     status = get_status_dia(AGENDAS[barbeiro], data_sel)
     
     if status == "BLOQUEADO":
-        st.error("🚫 Este barbeiro não atenderá nesta data (Evento de dia inteiro).")
+        st.error(f"🚫 O barbeiro {barbeiro} não atende nesta data.")
     else:
-        st.write("### Horários")
+        st.write("### Horários Disponíveis")
         todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
         cols = st.columns(3)
         for i, h in enumerate(todos):
@@ -107,28 +106,35 @@ with aba1:
                                 'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat()}
                             }
                             service.events().insert(calendarId=AGENDAS[barbeiro], body=corpo).execute()
-                            st.success("✅ AGENDADO COM SUCESSO!") # Aparecerá em VERDE
+                            st.success("✅ AGENDADO COM SUCESSO!")
                             st.rerun()
 
 with aba2:
-    st.write("### ❌ Cancelar Horário")
-    c_zap = st.text_input("WhatsApp cadastrado")
-    c_senha = st.text_input("Senha cadastrada", type="password")
-    c_barb = st.selectbox("Barbeiro do agendamento", list(AGENDAS.keys()), key="c_b")
+    st.write("### ❌ Cancelamento")
+    c_zap = st.text_input("Seu WhatsApp")
+    c_senha = st.text_input("Sua Senha", type="password")
+    c_barb = st.selectbox("Barbeiro", list(AGENDAS.keys()), key="cancel_b")
     
-    if st.button("BUSCAR MEU HORÁRIO", key="btn_cancel"):
+    if st.button("BUSCAR MEU HORÁRIO"):
         agora = datetime.now(fuso).isoformat()
         evs = service.events().list(calendarId=AGENDAS[c_barb], timeMin=agora, singleEvents=True).execute().get('items', [])
-        # Filtro rigoroso para achar o evento certo
-        meus = [e for e in evs if f"TEL: {c_zap}" in e.get('description','') and f"SENHA: {c_senha}" in e.get('description','')]
         
-        if meus:
-            for ev in meus:
-                h_ev = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
-                st.warning(f"Encontrado: {h_ev}")
-                if st.button(f"CONFIRMAR CANCELAMENTO", key=ev['id']):
+        # Lógica de cancelamento simplificada e direta
+        encontrado = False
+        for ev in evs:
+            desc = ev.get('description', '')
+            if f"TEL: {c_zap}" in desc and f"SENHA: {c_senha}" in desc:
+                encontrado = True
+                dt_exibicao = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
+                st.warning(f"Agendamento: {dt_exibicao}")
+                
+                # O botão de exclusão agora deleta e reinicia o app na hora
+                if st.button("CLIQUE AQUI PARA DELETAR", key=f"confirm_{ev['id']}"):
                     service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
-                    st.success("CANCELADO COM SUCESSO!")
-                    st.rerun() # ESSENCIAL: Recarrega a página e limpa a agenda
-        else:
-            st.error("Nenhum agendamento encontrado.")
+                    st.toast("Excluído com sucesso!", icon="🗑️")
+                    st.rerun()
+        
+        if not encontrado:
+            st.error("Nenhum agendamento encontrado com esses dados.")
+
+st.markdown(f"""<div class="footer-custom" style="position:fixed; bottom:0; width:100%; text-align:center; background:rgba(0,0,0,0.9); padding:10px; border-top:1px solid #D4AF37;">Desenvolvido por Lucas Biazoto | <a href="https://github.com/LBiazoto" style="color:#D4AF37;">GitHub</a></div>""", unsafe_allow_html=True)
