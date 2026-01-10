@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -43,7 +43,6 @@ def get_ocupados(calendar_id, data):
         min_t = datetime.combine(data, datetime.min.time()).astimezone(fuso).isoformat()
         max_t = datetime.combine(data, datetime.max.time()).astimezone(fuso).isoformat()
         events_result = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute()
-        # Captura apenas HH:mm para comparar com os botões
         return [ev['start'].get('dateTime', '')[11:16] for ev in events_result.get('items', [])]
     except: return []
 
@@ -77,9 +76,13 @@ with aba1:
                 if st.button(h, use_container_width=True, key=f"b_{h}"):
                     if nome and celular and senha:
                         try:
-                            # FIX: Criar horário redondo (00 segundos) ignorando o relógio atual
-                            data_hora_string = f"{data_sel} {h}"
-                            inicio = datetime.strptime(data_hora_string, "%Y-%m-%d %H:%M").replace(tzinfo=fuso)
+                            # --- CORREÇÃO DO HORÁRIO QUEBRADO ---
+                            # Extraímos a hora e o minuto da string "17:00"
+                            hora_parte, minuto_parte = map(int, h.split(':'))
+                            # Criamos um objeto de tempo puro (0 segundos, 0 microsegundos)
+                            tempo_puro = time(hour=hora_parte, minute=minuto_parte, second=0, microsecond=0)
+                            # Combinamos com a data selecionada
+                            inicio = datetime.combine(data_sel, tempo_puro).astimezone(fuso)
                             fim = inicio + timedelta(minutes=45)
                             
                             evento = {
@@ -89,16 +92,14 @@ with aba1:
                                 'end': {'dateTime': fim.isoformat(), 'timeZone': 'America/Sao_Paulo'},
                             }
                             service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                            st.success(f"✅ Agendado com sucesso para às {h}!")
+                            st.success(f"✅ Agendado para às {h} em ponto!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao agendar no Google: {e}")
-                    else: st.warning("Preencha todos os campos para agendar.")
+                            st.error(f"Erro ao agendar: {e}")
+                    else: st.warning("Preencha todos os campos!")
 
 with aba2:
     st.write("### 🔍 Localizar meu Horário")
-    
-    # Session state para manter a lista visível após o clique no botão de cancelar
     if "lista_cancelar" not in st.session_state:
         st.session_state.lista_cancelar = []
 
@@ -110,39 +111,26 @@ with aba2:
         if c_tel and c_senha:
             agora_iso = datetime.now(fuso).isoformat()
             eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=agora_iso, singleEvents=True).execute().get('items', [])
-            
-            # Filtra os agendamentos que batem com Tel e Senha
             st.session_state.lista_cancelar = [
                 ev for ev in eventos 
                 if f"TEL: {c_tel}" in ev.get('description', '') and f"SENHA: {c_senha}" in ev.get('description', '')
             ]
-            
             if not st.session_state.lista_cancelar:
-                st.error("Nenhum agendamento futuro encontrado com esses dados.")
-        else:
-            st.warning("Informe telefone e senha para buscar.")
+                st.error("Nenhum agendamento futuro encontrado.")
+        else: st.warning("Informe telefone e senha.")
 
-    # Exibe a lista para cancelamento
     if st.session_state.lista_cancelar:
         st.write(f"--- Encontramos {len(st.session_state.lista_cancelar)} agendamento(s) ---")
         agora_dt = datetime.now(fuso)
-        
         for ev in st.session_state.lista_cancelar:
-            # Converte o tempo do Google para o fuso local
-            ini_str = ev['start']['dateTime']
-            ini_dt = datetime.fromisoformat(ini_str.replace('Z', '+00:00')).astimezone(fuso)
-            
+            ini_dt = datetime.fromisoformat(ev['start']['dateTime'].replace('Z', '+00:00')).astimezone(fuso)
             st.info(f"📍 {ev['summary']} \n 📅 {ini_dt.strftime('%d/%m/%Y')} às {ini_dt.strftime('%H:%M')}")
-            
-            # Regra de 1 hora antes
             if agora_dt < (ini_dt - timedelta(hours=1)):
                 if st.button(f"CONFIRMAR CANCELAMENTO ({ini_dt.strftime('%H:%M')})", key=f"del_{ev['id']}", type="primary"):
                     try:
                         service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
-                        st.success("✅ Cancelamento realizado com sucesso!")
-                        st.session_state.lista_cancelar = [] # Limpa a memória
+                        st.success("✅ Cancelado com sucesso!")
+                        st.session_state.lista_cancelar = []
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao excluir: {e}")
-            else:
-                st.error("🚫 Bloqueado: Cancelamento permitido apenas até 1h antes do horário.")
+                    except Exception as e: st.error(f"Erro ao excluir: {e}")
+            else: st.error("🚫 Bloqueado: Cancelamento apenas até 1h antes.")
