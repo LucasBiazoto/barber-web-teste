@@ -1,16 +1,17 @@
 import streamlit as st
 from datetime import datetime, timedelta
+import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# IDs das Agendas dos Barbeiros
+# IDs das Agendas - MANTENHA OS SEUS IDs CORRETOS AQUI
 AGENDAS = {
-    "Bruno": "vários-números@group.calendar.google.com", # USE O SEU ID DO BRUNO AQUI
+    "Bruno": "COLE_SEU_ID_DO_BRUNO_AQUI", 
     "Duda": "7e95af6d94ea5bcf73f15c8dbc4ddc29fe544728219617478566bca73d05d7d4@group.calendar.google.com",
     "Nenê": "6f51a443e21211459f88c6b6e2c6173c6be31d19e151d8d1a700e96c99519920@group.calendar.google.com"
 }
 
-st.set_page_config(page_title="Barber Agendamento", page_icon="💈")
+st.set_page_config(page_title="Barber Shop", page_icon="💈")
 
 def conectar():
     try:
@@ -30,6 +31,7 @@ def conectar():
         return None
 
 service = conectar()
+fuso = pytz.timezone('America/Sao_Paulo')
 
 def get_ocupados(calendar_id, data):
     try:
@@ -39,14 +41,13 @@ def get_ocupados(calendar_id, data):
         return [ev['start'].get('dateTime', '')[11:16] for ev in events_result.get('items', [])]
     except: return []
 
-# --- INTERFACE COM ABAS ---
 st.title("💈 Barber Shop")
 aba1, aba2 = st.tabs(["📅 Agendar", "❌ Cancelar Horário"])
 
 with aba1:
     nome = st.text_input("Seu Nome", key="ag_nome")
-    celular = st.text_input("Celular", key="ag_tel")
-    senha = st.text_input("Crie uma Senha para cancelamentos", type="password", key="ag_senha")
+    celular = st.text_input("Celular (Ex: 11999999999)", key="ag_tel")
+    senha = st.text_input("Crie uma Senha", type="password", key="ag_senha")
 
     col_p, col_s = st.columns(2)
     with col_p: prof = st.selectbox("Barbeiro", list(AGENDAS.keys()), key="ag_prof")
@@ -74,30 +75,53 @@ with aba1:
                             'end': {'dateTime': (inicio + timedelta(minutes=45)).strftime('%Y-%m-%dT%H:%M:00-03:00'), 'timeZone': 'America/Sao_Paulo'},
                         }
                         service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                        st.success("✅ Agendado!")
+                        st.success(f"✅ Agendado para {h}!")
                         st.rerun()
                     else: st.warning("Preencha todos os campos!")
 
 with aba2:
-    st.write("### Informe os dados para cancelar")
-    c_prof = st.selectbox("Com qual barbeiro agendou?", list(AGENDAS.keys()), key="c_prof")
-    c_data = st.date_input("Data do agendamento", key="c_data")
-    c_senha = st.text_input("Sua senha de cancelamento", type="password", key="c_senha")
+    st.write("### ❌ Cancelar meu Horário")
+    c_tel = st.text_input("Celular cadastrado", key="c_tel_input")
+    c_senha = st.text_input("Sua senha", type="password", key="c_senha_input")
+    c_prof = st.selectbox("Com qual barbeiro?", list(AGENDAS.keys()), key="c_prof_input")
 
-    if st.button("BUSCAR MEU HORÁRIO"):
-        if c_senha:
-            min_t = datetime.combine(c_data, datetime.min.time()).isoformat() + "Z"
-            max_t = datetime.combine(c_data, datetime.max.time()).isoformat() + "Z"
-            eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=min_t, timeMax=max_t, singleEvents=True).execute().get('items', [])
+    if st.button("BUSCAR MEU AGENDAMENTO"):
+        if c_tel and c_senha:
+            # Busca eventos futuros (a partir de hoje)
+            hoje = datetime.now(fuso).isoformat()
+            eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=hoje, singleEvents=True).execute().get('items', [])
             
-            encontrado = False
+            encontrados = []
             for ev in eventos:
                 desc = ev.get('description', '')
-                if f"SENHA: {c_senha}" in desc:
-                    service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
-                    st.success(f"❌ Agendamento das {ev['start']['dateTime'][11:16]} cancelado com sucesso!")
-                    encontrado = True
-                    st.rerun()
-                    break
-            if not encontrado: st.error("Nenhum agendamento encontrado com essa senha para esta data.")
-        else: st.warning("Digite a senha.")
+                if f"TEL: {c_tel}" in desc and f"SENHA: {c_senha}" in desc:
+                    encontrados.append(ev)
+            
+            if encontrados:
+                st.write(f"--- Encontramos {len(encontrados)} agendamento(s) ---")
+                agora = datetime.now(fuso)
+                
+                for ev in encontrados:
+                    inicio_str = ev['start']['dateTime']
+                    # Converter string do Google para objeto datetime real
+                    inicio_dt = datetime.fromisoformat(inicio_str.replace('Z', '+00:00')).astimezone(fuso)
+                    
+                    data_formatada = inicio_dt.strftime('%d/%m/%Y')
+                    hora_formatada = inicio_dt.strftime('%H:%M')
+                    
+                    st.info(f"📍 {ev['summary']} \n 📅 Data: {data_formatada} às {hora_formatada}")
+                    
+                    # Lógica de 1 hora antes
+                    limite_cancelamento = inicio_dt - timedelta(hours=1)
+                    
+                    if agora < limite_cancelamento:
+                        if st.button(f"CONFIRMAR CANCELAMENTO ({hora_formatada})", key=f"del_{ev['id']}", type="primary"):
+                            service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
+                            st.success("❌ Cancelado com sucesso!")
+                            st.rerun()
+                    else:
+                        st.error(f"⚠️ O horário das {hora_formatada} não pode mais ser cancelado pelo site (limite de 1h antes). Entre em contato com a barbearia.")
+            else:
+                st.error("Nenhum agendamento encontrado com esses dados.")
+        else:
+            st.warning("Preencha telefone e senha.")
