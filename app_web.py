@@ -43,6 +43,7 @@ def get_ocupados(calendar_id, data):
         min_t = datetime.combine(data, datetime.min.time()).astimezone(fuso).isoformat()
         max_t = datetime.combine(data, datetime.max.time()).astimezone(fuso).isoformat()
         events_result = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute()
+        # Captura apenas HH:mm para comparar com os botões
         return [ev['start'].get('dateTime', '')[11:16] for ev in events_result.get('items', [])]
     except: return []
 
@@ -76,26 +77,30 @@ with aba1:
                 if st.button(h, use_container_width=True, key=f"b_{h}"):
                     if nome and celular and senha:
                         try:
-                            inicio = datetime.strptime(f"{data_sel} {h}", "%Y-%m-%d %H:%M").replace(tzinfo=fuso)
+                            # FIX: Criar horário redondo (00 segundos) ignorando o relógio atual
+                            data_hora_string = f"{data_sel} {h}"
+                            inicio = datetime.strptime(data_hora_string, "%Y-%m-%d %H:%M").replace(tzinfo=fuso)
+                            fim = inicio + timedelta(minutes=45)
+                            
                             evento = {
                                 'summary': f"{servico}: {nome}",
                                 'description': f"TEL: {celular} | SENHA: {senha}",
                                 'start': {'dateTime': inicio.isoformat(), 'timeZone': 'America/Sao_Paulo'},
-                                'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat(), 'timeZone': 'America/Sao_Paulo'},
+                                'end': {'dateTime': fim.isoformat(), 'timeZone': 'America/Sao_Paulo'},
                             }
                             service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                            st.success(f"✅ Agendado para {h}!")
+                            st.success(f"✅ Agendado com sucesso para às {h}!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao agendar: {e}")
-                    else: st.warning("Preencha Nome, Celular e Senha!")
+                            st.error(f"Erro ao agendar no Google: {e}")
+                    else: st.warning("Preencha todos os campos para agendar.")
 
 with aba2:
     st.write("### 🔍 Localizar meu Horário")
     
-    # Memória para manter os resultados na tela após clicar em cancelar
-    if "meus_agendamentos" not in st.session_state:
-        st.session_state.meus_agendamentos = []
+    # Session state para manter a lista visível após o clique no botão de cancelar
+    if "lista_cancelar" not in st.session_state:
+        st.session_state.lista_cancelar = []
 
     c_tel = st.text_input("Celular cadastrado", key="c_tel_in")
     c_senha = st.text_input("Sua senha", type="password", key="c_senha_in")
@@ -103,40 +108,41 @@ with aba2:
 
     if st.button("BUSCAR MEUS AGENDAMENTOS"):
         if c_tel and c_senha:
-            agora = datetime.now(fuso).isoformat()
-            # Busca eventos futuros
-            eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=agora, singleEvents=True).execute().get('items', [])
+            agora_iso = datetime.now(fuso).isoformat()
+            eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=agora_iso, singleEvents=True).execute().get('items', [])
             
-            # Filtra por Celular e Senha na descrição
-            st.session_state.meus_agendamentos = [
+            # Filtra os agendamentos que batem com Tel e Senha
+            st.session_state.lista_cancelar = [
                 ev for ev in eventos 
                 if f"TEL: {c_tel}" in ev.get('description', '') and f"SENHA: {c_senha}" in ev.get('description', '')
             ]
             
-            if not st.session_state.meus_agendamentos:
-                st.error("Nenhum agendamento futuro encontrado.")
+            if not st.session_state.lista_cancelar:
+                st.error("Nenhum agendamento futuro encontrado com esses dados.")
         else:
-            st.warning("Preencha telefone e senha.")
+            st.warning("Informe telefone e senha para buscar.")
 
-    # Exibe agendamentos encontrados
-    if st.session_state.meus_agendamentos:
-        st.write(f"--- Encontramos {len(st.session_state.meus_agendamentos)} horário(s) ---")
+    # Exibe a lista para cancelamento
+    if st.session_state.lista_cancelar:
+        st.write(f"--- Encontramos {len(st.session_state.lista_cancelar)} agendamento(s) ---")
         agora_dt = datetime.now(fuso)
         
-        for ev in st.session_state.meus_agendamentos:
-            ini_dt = datetime.fromisoformat(ev['start']['dateTime'].replace('Z', '+00:00')).astimezone(fuso)
+        for ev in st.session_state.lista_cancelar:
+            # Converte o tempo do Google para o fuso local
+            ini_str = ev['start']['dateTime']
+            ini_dt = datetime.fromisoformat(ini_str.replace('Z', '+00:00')).astimezone(fuso)
             
             st.info(f"📍 {ev['summary']} \n 📅 {ini_dt.strftime('%d/%m/%Y')} às {ini_dt.strftime('%H:%M')}")
             
-            # Regra: Só cancela com mais de 1h de antecedência
+            # Regra de 1 hora antes
             if agora_dt < (ini_dt - timedelta(hours=1)):
                 if st.button(f"CONFIRMAR CANCELAMENTO ({ini_dt.strftime('%H:%M')})", key=f"del_{ev['id']}", type="primary"):
                     try:
                         service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
-                        st.success("❌ Cancelado com sucesso!")
-                        st.session_state.meus_agendamentos = [] # Limpa a lista
+                        st.success("✅ Cancelamento realizado com sucesso!")
+                        st.session_state.lista_cancelar = [] # Limpa a memória
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Erro ao deletar: {e}")
+                        st.error(f"Erro ao excluir: {e}")
             else:
-                st.error("🚫 Bloqueado: Cancelamento permitido apenas com 1h de antecedência.")
+                st.error("🚫 Bloqueado: Cancelamento permitido apenas até 1h antes do horário.")
