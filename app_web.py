@@ -40,9 +40,11 @@ service = conectar()
 
 def get_ocupados(calendar_id, data):
     try:
-        min_t = datetime.combine(data, datetime.min.time()).astimezone(fuso).isoformat()
-        max_t = datetime.combine(data, datetime.max.time()).astimezone(fuso).isoformat()
+        # Define o dia com fuso horário local
+        min_t = fuso.localize(datetime.combine(data, datetime.min.time())).isoformat()
+        max_t = fuso.localize(datetime.combine(data, datetime.max.time())).isoformat()
         events_result = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute()
+        # Pega o horário correto do JSON do Google
         return [ev['start'].get('dateTime', '')[11:16] for ev in events_result.get('items', [])]
     except: return []
 
@@ -76,23 +78,21 @@ with aba1:
                 if st.button(h, use_container_width=True, key=f"b_{h}"):
                     if nome and celular and senha:
                         try:
-                            # --- CORREÇÃO DO HORÁRIO QUEBRADO ---
-                            # Extraímos a hora e o minuto da string "17:00"
+                            # --- CORREÇÃO FINAL DE FUSO E MINUTOS ---
                             hora_parte, minuto_parte = map(int, h.split(':'))
-                            # Criamos um objeto de tempo puro (0 segundos, 0 microsegundos)
-                            tempo_puro = time(hour=hora_parte, minute=minuto_parte, second=0, microsecond=0)
-                            # Combinamos com a data selecionada
-                            inicio = datetime.combine(data_sel, tempo_puro).astimezone(fuso)
+                            tempo_puro = time(hour=hora_parte, minute=minuto_parte)
+                            # Localizamos a data e hora no fuso de São Paulo ANTES de enviar
+                            inicio = fuso.localize(datetime.combine(data_sel, tempo_puro))
                             fim = inicio + timedelta(minutes=45)
                             
                             evento = {
                                 'summary': f"{servico}: {nome}",
                                 'description': f"TEL: {celular} | SENHA: {senha}",
-                                'start': {'dateTime': inicio.isoformat(), 'timeZone': 'America/Sao_Paulo'},
-                                'end': {'dateTime': fim.isoformat(), 'timeZone': 'America/Sao_Paulo'},
+                                'start': {'dateTime': inicio.isoformat()},
+                                'end': {'dateTime': fim.isoformat()},
                             }
                             service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                            st.success(f"✅ Agendado para às {h} em ponto!")
+                            st.success(f"✅ Agendado para às {h}!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Erro ao agendar: {e}")
@@ -123,7 +123,7 @@ with aba2:
         st.write(f"--- Encontramos {len(st.session_state.lista_cancelar)} agendamento(s) ---")
         agora_dt = datetime.now(fuso)
         for ev in st.session_state.lista_cancelar:
-            ini_dt = datetime.fromisoformat(ev['start']['dateTime'].replace('Z', '+00:00')).astimezone(fuso)
+            ini_dt = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso)
             st.info(f"📍 {ev['summary']} \n 📅 {ini_dt.strftime('%d/%m/%Y')} às {ini_dt.strftime('%H:%M')}")
             if agora_dt < (ini_dt - timedelta(hours=1)):
                 if st.button(f"CONFIRMAR CANCELAMENTO ({ini_dt.strftime('%H:%M')})", key=f"del_{ev['id']}", type="primary"):
