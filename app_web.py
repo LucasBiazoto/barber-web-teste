@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -13,12 +13,33 @@ AGENDAS = {
     "Nenê": "6f51a443e21211459f88c6b6e2c6173c6be31d19e151d8d1a700e96c99519920@group.calendar.google.com"
 }
 
-st.set_page_config(page_title="Barber Shop", page_icon="💈")
+st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="centered")
 fuso = pytz.timezone('America/Sao_Paulo')
 
-# =========================================================
-# 2. CONEXÃO COM O GOOGLE
-# =========================================================
+# --- ESTILO VISUAL BARBER SHOP (DARK & GOLD) ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #121212; color: #E0E0E0; }
+    div.stButton > button {
+        background-color: #1E1E1E;
+        color: #D4AF37; 
+        border: 1px solid #D4AF37;
+        border-radius: 5px;
+    }
+    div.stButton > button:hover {
+        background-color: #D4AF37;
+        color: #121212;
+    }
+    .stTextInput>div>div>input, .stSelectbox>div>div>div {
+        background-color: #1E1E1E !important;
+        color: white !important;
+    }
+    h1, h2, h3 { color: #D4AF37 !important; text-align: center; }
+    .stTabs [aria-selected="true"] { color: #D4AF37 !important; border-bottom: 2px solid #D4AF37 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- CONEXÃO GOOGLE ---
 def conectar():
     try:
         raw_key = st.secrets["private_key"]
@@ -33,39 +54,36 @@ def conectar():
         creds = service_account.Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/calendar'])
         return build('calendar', 'v3', credentials=creds)
     except Exception as e:
-        st.error(f"Erro na conexão com Google: {e}")
+        st.error(f"Erro: {e}")
         return None
 
 service = conectar()
 
 def get_ocupados(calendar_id, data):
     try:
-        # Define o dia com fuso horário local
-        min_t = fuso.localize(datetime.combine(data, datetime.min.time())).isoformat()
-        max_t = fuso.localize(datetime.combine(data, datetime.max.time())).isoformat()
+        min_t = datetime.combine(data, datetime.min.time()).astimezone(fuso).isoformat()
+        max_t = datetime.combine(data, datetime.max.time()).astimezone(fuso).isoformat()
         events_result = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute()
-        # Pega o horário correto do JSON do Google
         return [ev['start'].get('dateTime', '')[11:16] for ev in events_result.get('items', [])]
     except: return []
 
-# =========================================================
-# 3. INTERFACE PRINCIPAL
-# =========================================================
-st.title("💈 Barber Shop")
-aba1, aba2 = st.tabs(["📅 Agendar", "❌ Cancelar Horário"])
+# --- INTERFACE ---
+st.title("💈 BARBER SHOP PREMIUM")
+aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR"])
 
 with aba1:
-    nome = st.text_input("Seu Nome", key="ag_nome")
-    celular = st.text_input("Celular (Ex: 11999999999)", key="ag_tel")
-    senha = st.text_input("Crie uma Senha", type="password", key="ag_senha")
-
-    col_p, col_s = st.columns(2)
-    with col_p: prof = st.selectbox("Barbeiro", list(AGENDAS.keys()), key="ag_prof")
-    with col_s: servico = st.selectbox("Serviço", ["Corte", "Barba", "Corte e Barba"], key="ag_serv")
-
-    data_sel = st.date_input("Data", min_value=datetime.now(fuso).date(), key="ag_data")
+    nome = st.text_input("Nome Completo", key="ag_nome")
+    col1, col2 = st.columns(2)
+    with col1: celular = st.text_input("WhatsApp", key="ag_tel")
+    with col2: senha = st.text_input("Senha de Cancelamento", type="password", key="ag_senha")
     
-    st.write("### Horários Disponíveis:")
+    col3, col4 = st.columns(2)
+    with col3: prof = st.selectbox("Barbeiro", list(AGENDAS.keys()), key="ag_prof")
+    with col4: servico = st.selectbox("Serviço", ["Corte", "Barba", "Combo Premium"], key="ag_serv")
+    
+    data_sel = st.date_input("Data", min_value=datetime.now(fuso).date())
+    
+    st.write("### 🕒 Horários Disponíveis")
     todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
     ocupados = get_ocupados(AGENDAS[prof], data_sel)
     cols = st.columns(3)
@@ -78,59 +96,41 @@ with aba1:
                 if st.button(h, use_container_width=True, key=f"b_{h}"):
                     if nome and celular and senha:
                         try:
-                            # --- CORREÇÃO FINAL DE FUSO E MINUTOS ---
-                            hora_parte, minuto_parte = map(int, h.split(':'))
-                            tempo_puro = time(hour=hora_parte, minute=minuto_parte)
-                            # Localizamos a data e hora no fuso de São Paulo ANTES de enviar
-                            inicio = fuso.localize(datetime.combine(data_sel, tempo_puro))
-                            fim = inicio + timedelta(minutes=45)
+                            # Voltando para a lógica de tempo que já funcionava para você
+                            data_hora_string = f"{data_sel} {h}"
+                            inicio = datetime.strptime(data_hora_string, "%Y-%m-%d %H:%M").replace(tzinfo=fuso)
                             
                             evento = {
                                 'summary': f"{servico}: {nome}",
                                 'description': f"TEL: {celular} | SENHA: {senha}",
-                                'start': {'dateTime': inicio.isoformat()},
-                                'end': {'dateTime': fim.isoformat()},
+                                'start': {'dateTime': inicio.isoformat(), 'timeZone': 'America/Sao_Paulo'},
+                                'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat(), 'timeZone': 'America/Sao_Paulo'},
                             }
                             service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                            st.success(f"✅ Agendado para às {h}!")
+                            st.success(f"✅ Reservado para às {h}!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao agendar: {e}")
+                            st.error(f"Erro: {e}")
                     else: st.warning("Preencha todos os campos!")
 
 with aba2:
-    st.write("### 🔍 Localizar meu Horário")
-    if "lista_cancelar" not in st.session_state:
-        st.session_state.lista_cancelar = []
+    st.write("### 🔍 Localizar Agendamento")
+    if "lista_cancelar" not in st.session_state: st.session_state.lista_cancelar = []
+    
+    c_tel = st.text_input("WhatsApp cadastrado", key="c_tel_in")
+    c_senha = st.text_input("Senha", type="password", key="c_senha_in")
+    c_prof = st.selectbox("Barbeiro agendado", list(AGENDAS.keys()), key="c_prof_in")
 
-    c_tel = st.text_input("Celular cadastrado", key="c_tel_in")
-    c_senha = st.text_input("Sua senha", type="password", key="c_senha_in")
-    c_prof = st.selectbox("Com qual barbeiro?", list(AGENDAS.keys()), key="c_prof_in")
-
-    if st.button("BUSCAR MEUS AGENDAMENTOS"):
-        if c_tel and c_senha:
-            agora_iso = datetime.now(fuso).isoformat()
-            eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=agora_iso, singleEvents=True).execute().get('items', [])
-            st.session_state.lista_cancelar = [
-                ev for ev in eventos 
-                if f"TEL: {c_tel}" in ev.get('description', '') and f"SENHA: {c_senha}" in ev.get('description', '')
-            ]
-            if not st.session_state.lista_cancelar:
-                st.error("Nenhum agendamento futuro encontrado.")
-        else: st.warning("Informe telefone e senha.")
-
+    if st.button("BUSCAR HORÁRIO", use_container_width=True):
+        agora = datetime.now(fuso).isoformat()
+        eventos = service.events().list(calendarId=AGENDAS[c_prof], timeMin=agora, singleEvents=True).execute().get('items', [])
+        st.session_state.lista_cancelar = [ev for ev in eventos if f"TEL: {c_tel}" in ev.get('description', '') and f"SENHA: {c_senha}" in ev.get('description', '')]
+    
     if st.session_state.lista_cancelar:
-        st.write(f"--- Encontramos {len(st.session_state.lista_cancelar)} agendamento(s) ---")
-        agora_dt = datetime.now(fuso)
         for ev in st.session_state.lista_cancelar:
-            ini_dt = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso)
-            st.info(f"📍 {ev['summary']} \n 📅 {ini_dt.strftime('%d/%m/%Y')} às {ini_dt.strftime('%H:%M')}")
-            if agora_dt < (ini_dt - timedelta(hours=1)):
-                if st.button(f"CONFIRMAR CANCELAMENTO ({ini_dt.strftime('%H:%M')})", key=f"del_{ev['id']}", type="primary"):
-                    try:
-                        service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
-                        st.success("✅ Cancelado com sucesso!")
-                        st.session_state.lista_cancelar = []
-                        st.rerun()
-                    except Exception as e: st.error(f"Erro ao excluir: {e}")
-            else: st.error("🚫 Bloqueado: Cancelamento apenas até 1h antes.")
+            ini_dt = datetime.fromisoformat(ev['start']['dateTime'].replace('Z', '+00:00')).astimezone(fuso)
+            st.info(f"📅 {ini_dt.strftime('%d/%m/%Y')} às {ini_dt.strftime('%H:%M')}")
+            if st.button(f"CONFIRMAR CANCELAMENTO", key=f"del_{ev['id']}", type="primary", use_container_width=True):
+                service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
+                st.session_state.lista_cancelar = []
+                st.rerun()
