@@ -3,19 +3,9 @@ from datetime import datetime, timedelta, time
 import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import locale
-
-# Tenta configurar o calendário para Português
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.utf8')
-except:
-    try:
-        locale.setlocale(locale.LC_ALL, 'pt_BR')
-    except:
-        pass # Mantém o padrão do sistema se o locale não estiver instalado
 
 # =========================================================
-# 1. IDs DAS AGENDAS (CONFORME SEUS PRINTS)
+# 1. IDs DAS AGENDAS
 # =========================================================
 AGENDAS = {
     "Bruno": "b2f33326cb9d42ddf65423eed8332d70be96f8b21f18a902093ea432d1d523f5@group.calendar.google.com",
@@ -27,33 +17,67 @@ st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="c
 fuso = pytz.timezone('America/Sao_Paulo')
 
 # =========================================================
-# 2. ESTILO VISUAL (IMAGEM DE FUNDO E TEXTO BRANCO)
+# 2. ESTILO VISUAL (DESIGN AJUSTADO)
 # =========================================================
 st.markdown("""
     <style>
+    /* Imagem de fundo com mais destaque */
     .stApp {
-        background: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), 
+        background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), 
         url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070");
         background-size: cover;
         background-attachment: fixed;
     }
-    .stMarkdown p, label, .stWidgetLabel, .stTabs [data-baseweb="tab"] p {
+
+    /* Labels e Textos em Branco Puro */
+    .stMarkdown p, label, .stWidgetLabel {
         color: white !important;
         font-weight: bold !important;
-        text-shadow: 1px 1px 2px black;
+        text-shadow: 1px 1px 2px #000;
     }
+
+    /* Container menor para dar destaque ao fundo */
     div[data-testid="stVerticalBlock"] > div {
-        background: rgba(20, 20, 20, 0.6);
+        background: rgba(20, 20, 20, 0.5);
         padding: 15px;
-        border-radius: 12px;
+        border-radius: 15px;
+        max-width: 90%; /* Reduz a largura interna */
+        margin: auto;
     }
-    h1, h3 { color: #D4AF37 !important; text-align: center; text-shadow: 2px 2px 4px #000; }
+
+    /* Título Dourado */
+    h1 { color: #D4AF37 !important; text-align: center; }
+    
+    /* Botões Dourados */
     div.stButton > button {
         background-color: #D4AF37 !important;
         color: black !important;
         font-weight: bold;
-        border-radius: 8px;
         border: none;
+    }
+    
+    /* Esconder o menu e o rodapé padrão do Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Novo Rodapé Personalizado */
+    .footer-custom {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        text-align: center;
+        padding: 10px;
+        font-size: 14px;
+        z-index: 999;
+    }
+    .footer-custom a {
+        color: #D4AF37;
+        text-decoration: none;
+        vertical-align: middle;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -75,7 +99,7 @@ def conectar():
         creds = service_account.Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/calendar'])
         return build('calendar', 'v3', credentials=creds)
     except Exception as e:
-        st.error(f"Erro de conexão: {e}")
+        st.error(f"Erro: {e}")
         return None
 
 service = conectar()
@@ -92,7 +116,6 @@ def get_ocupados(calendar_id, data):
 # 4. INTERFACE
 # =========================================================
 st.title("💈 BARBER SHOP PREMIUM")
-# Botão Cancelar renomeado conforme pedido
 aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR AGENDAMENTO"])
 
 with aba1:
@@ -105,8 +128,7 @@ with aba1:
     with col3: prof = st.selectbox("Barbeiro", list(AGENDAS.keys()))
     with col4: servico = st.selectbox("Serviço", ["Corte", "Barba", "Combo Premium"])
     
-    # Calendário em Português
-    data_sel = st.date_input("Selecione a Data", min_value=datetime.now(fuso).date())
+    data_sel = st.date_input("Data do agendamento", min_value=datetime.now(fuso).date())
     
     st.write("### 🕒 Horários Disponíveis")
     todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
@@ -121,10 +143,9 @@ with aba1:
                 if st.button(h, key=f"b_{h}", use_container_width=True):
                     if nome and celular and senha:
                         try:
-                            # --- SOLUÇÃO DEFINITIVA PARA OS 6 MINUTOS ---
-                            # Extraímos apenas a HORA do botão e zeramos minutos e segundos
+                            # Blindagem definitiva contra os 6 minutos
                             h_int = int(h.split(':')[0])
-                            inicio = datetime.combine(data_sel, time(hour=h_int, minute=0, second=0)).replace(tzinfo=fuso)
+                            inicio = datetime.combine(data_sel, time(hour=h_int, minute=0)).replace(tzinfo=fuso)
                             
                             evento = {
                                 'summary': f"{servico}: {nome}",
@@ -133,10 +154,10 @@ with aba1:
                                 'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat(), 'timeZone': 'America/Sao_Paulo'},
                             }
                             service.events().insert(calendarId=AGENDAS[prof], body=evento).execute()
-                            st.success(f"✅ Agendado para às {h} em ponto!")
+                            st.success(f"✅ Agendado para às {h}!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao agendar: {e}")
+                            st.error(f"Erro: {e}")
                     else: st.warning("Preencha todos os campos!")
 
 with aba2:
@@ -154,10 +175,19 @@ with aba2:
     
     if st.session_state.lista_cancelar:
         for ev in st.session_state.lista_cancelar:
-            # Garante que a exibição no cancelamento também mostre o horário correto
             ini_dt = datetime.fromisoformat(ev['start']['dateTime'].replace('Z', '+00:00')).astimezone(fuso)
             st.info(f"📅 {ini_dt.strftime('%d/%m/%Y')} às {ini_dt.strftime('%H:%M')}")
             if st.button(f"CONFIRMAR CANCELAMENTO", key=f"del_{ev['id']}", type="primary", use_container_width=True):
                 service.events().delete(calendarId=AGENDAS[c_prof], eventId=ev['id']).execute()
                 st.session_state.lista_cancelar = []
                 st.rerun()
+
+# --- RODAPÉ PERSONALIZADO ---
+st.markdown("""
+    <div class="footer-custom">
+        Desenvolvido por Lucas Biazoto | 
+        <a href="https://github.com/SEU_USUARIO_AQUI" target="_blank">
+            <img src="https://cdn-icons-png.flaticon.com/512/25/25231.png" width="20" height="20"> Acessar GitHub
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
