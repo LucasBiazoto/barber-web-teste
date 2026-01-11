@@ -15,7 +15,7 @@ st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="c
 fuso = pytz.timezone('America/Sao_Paulo')
 
 # =========================================================
-# ESTILO VISUAL MANTIDO (Dourado/Preto/Verde)
+# ESTILO VISUAL (AMARELO E VERDE)
 # =========================================================
 st.markdown("""
     <style>
@@ -30,7 +30,7 @@ st.markdown("""
     div.stButton > button { background-color: #D4AF37 !important; color: black !important; font-weight: bold; width: 100%; border-radius: 8px; }
     
     /* COR DE SUCESSO VERDE */
-    div[data-testid="stNotificationV2"] { background-color: #28a745 !important; color: white !important; font-weight: bold !important; }
+    div[data-testid="stNotificationV2"] { background-color: #28a745 !important; color: white !important; }
     
     #MainMenu, footer, header {visibility: hidden;}
     </style>
@@ -55,22 +55,15 @@ def get_status_dia(calendar_id, data):
         min_t = fuso.localize(datetime.combine(data, time.min)).isoformat()
         max_t = fuso.localize(datetime.combine(data, time.max)).isoformat()
         events = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute().get('items', [])
-        
         ocupados = []
         for ev in events:
-            # BLOQUEIO DE DIA INTEIRO (ex: Evento dia 13 no celular)
-            if 'date' in ev['start']:
-                return "BLOQUEADO"
-            # BLOQUEIO DE HORÁRIOS AGENDADOS
+            if 'date' in ev['start']: return "BLOQUEADO"
             start_dt = ev['start'].get('dateTime')
             if start_dt:
                 ocupados.append(datetime.fromisoformat(start_dt).astimezone(fuso).strftime('%H:%M'))
         return ocupados
     except: return []
 
-# =========================================================
-# INTERFACE
-# =========================================================
 st.title("💈 BARBER SHOP PREMIUM")
 aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR"])
 
@@ -81,15 +74,13 @@ with aba1:
     with col2: senha = st.text_input("Senha de Cancelamento", type="password")
     
     prof = st.selectbox("Barbeiro", list(AGENDAS.keys()))
-    serv = st.selectbox("Serviço", ["Corte", "Barba", "Combo"])
     data_sel = st.date_input("Data", min_value=datetime.now(fuso).date())
     
     status = get_status_dia(AGENDAS[prof], data_sel)
     
     if status == "BLOQUEADO":
-        st.error("🚫 Barbeiro indisponível nesta data (Evento de dia inteiro).")
+        st.error("🚫 Barbeiro indisponível nesta data.")
     else:
-        st.write("### Horários Disponíveis")
         todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
         cols = st.columns(3)
         for i, h in enumerate(todos):
@@ -98,10 +89,9 @@ with aba1:
                 else:
                     if st.button(h, key=f"l_{h}"):
                         if nome and zap and senha:
-                            h_i = int(h.split(':')[0])
-                            inicio = fuso.localize(datetime.combine(data_sel, time(h_i, 0)))
+                            inicio = fuso.localize(datetime.combine(data_sel, time(int(h.split(':')[0]), 0)))
                             corpo = {
-                                'summary': f"{serv}: {nome}",
+                                'summary': f"Corte: {nome}",
                                 'description': f"TEL: {zap} | SENHA: {senha}",
                                 'start': {'dateTime': inicio.isoformat()},
                                 'end': {'dateTime': (inicio + timedelta(minutes=45)).isoformat()}
@@ -116,22 +106,27 @@ with aba2:
     c_senha = st.text_input("Senha cadastrada", type="password", key="csenha")
     c_barb = st.selectbox("Barbeiro", list(AGENDAS.keys()), key="cbarb")
     
+    # Inicializa o estado da busca se não existir
+    if 'eventos_encontrados' not in st.session_state:
+        st.session_state.eventos_encontrados = []
+
     if st.button("BUSCAR MEU HORÁRIO"):
         agora = datetime.now(fuso).isoformat()
         evs = service.events().list(calendarId=AGENDAS[c_barb], timeMin=agora, singleEvents=True).execute().get('items', [])
+        # Filtra e guarda no estado da sessão
+        st.session_state.eventos_encontrados = [e for e in evs if f"TEL: {c_zap}" in e.get('description', '') and f"SENHA: {c_senha}" in e.get('description', '')]
         
-        # Filtro para encontrar o evento exato do cliente
-        meus = [e for e in evs if f"TEL: {c_zap}" in e.get('description', '') and f"SENHA: {c_senha}" in e.get('description', '')]
-        
-        if meus:
-            for ev in meus:
-                h_ev = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
-                st.warning(f"Agendamento: {h_ev}")
-                if st.button(f"CONFIRMAR CANCELAMENTO", key=f"del_{ev['id']}"):
-                    service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
-                    st.success("🗑️ CANCELADO COM SUCESSO!")
-                    st.rerun()
-        else:
+        if not st.session_state.eventos_encontrados:
             st.error("Nenhum agendamento encontrado.")
+
+    # Exibe os resultados guardados na sessão
+    for ev in st.session_state.eventos_encontrados:
+        h_ev = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
+        st.warning(f"Encontrado: {h_ev}")
+        if st.button(f"CONFIRMAR CANCELAMENTO", key=f"del_{ev['id']}"):
+            service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
+            st.session_state.eventos_encontrados = [] # Limpa a busca
+            st.success("🗑️ CANCELADO COM SUCESSO!")
+            st.rerun()
 
 st.markdown(f"""<div style="position:fixed; bottom:0; width:100%; text-align:center; background:rgba(0,0,0,0.9); padding:10px; border-top:1px solid #D4AF37; color:white;">Desenvolvido por Lucas Biazoto | <a href="https://github.com/LBiazoto" style="color:#D4AF37;">GitHub</a></div>""", unsafe_allow_html=True)
