@@ -15,7 +15,7 @@ st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="c
 fuso = pytz.timezone('America/Sao_Paulo')
 
 # =========================================================
-# ESTILO VISUAL (AMARELO E VERDE)
+# ESTILO VISUAL (CORES E BOTÃO VERMELHO)
 # =========================================================
 st.markdown("""
     <style>
@@ -27,9 +27,16 @@ st.markdown("""
     .stMarkdown p, label, .stWidgetLabel { color: white !important; font-weight: bold !important; text-shadow: 1px 1px 2px #000; }
     div[data-testid="stVerticalBlock"] > div { background: rgba(10, 10, 10, 0.7); border-radius: 15px; padding: 20px; }
     h1 { color: #D4AF37 !important; text-align: center; }
+    
+    /* Botões Padrão (Dourado) */
     div.stButton > button { background-color: #D4AF37 !important; color: black !important; font-weight: bold; width: 100%; border-radius: 8px; }
     
-    /* COR DE SUCESSO VERDE */
+    /* Botão específico de Cancelamento (VERMELHO) */
+    div.stButton > button[key^="del_"] {
+        background-color: #ff4b4b !important;
+        color: white !important;
+    }
+    
     div[data-testid="stNotificationV2"] { background-color: #28a745 !important; color: white !important; }
     
     #MainMenu, footer, header {visibility: hidden;}
@@ -65,13 +72,13 @@ def get_status_dia(calendar_id, data):
     except: return []
 
 st.title("💈 BARBER SHOP PREMIUM")
-aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR"])
+aba1, aba2 = st.tabs(["📅 AGENDAR", "❌ CANCELAR AGENDAMENTO"])
 
 with aba1:
-    nome = st.text_input("Nome")
+    nome = st.text_input("Nome ou apelido")
     col1, col2 = st.columns(2)
-    with col1: zap = st.text_input("WhatsApp")
-    with col2: senha = st.text_input("Senha de Cancelamento", type="password")
+    with col1: zap = st.text_input("Telefone com o DDD")
+    with col2: senha = st.text_input("Crie uma senha", type="password")
     
     prof = st.selectbox("Barbeiro", list(AGENDAS.keys()))
     data_sel = st.date_input("Data", min_value=datetime.now(fuso).date())
@@ -101,31 +108,29 @@ with aba1:
                             st.rerun()
 
 with aba2:
-    st.write("### ❌ Cancelar Horário")
-    c_zap = st.text_input("WhatsApp cadastrado", key="czap")
+    st.write("### ❌ Cancelar agendamento")
+    c_zap = st.text_input("Telefone com o DDD", key="czap")
     c_senha = st.text_input("Senha cadastrada", type="password", key="csenha")
     c_barb = st.selectbox("Barbeiro", list(AGENDAS.keys()), key="cbarb")
     
-    # Inicializa o estado da busca se não existir
     if 'eventos_encontrados' not in st.session_state:
         st.session_state.eventos_encontrados = []
 
     if st.button("BUSCAR MEU HORÁRIO"):
         agora = datetime.now(fuso).isoformat()
         evs = service.events().list(calendarId=AGENDAS[c_barb], timeMin=agora, singleEvents=True).execute().get('items', [])
-        # Filtra e guarda no estado da sessão
         st.session_state.eventos_encontrados = [e for e in evs if f"TEL: {c_zap}" in e.get('description', '') and f"SENHA: {c_senha}" in e.get('description', '')]
         
         if not st.session_state.eventos_encontrados:
             st.error("Nenhum agendamento encontrado.")
 
-    # Exibe os resultados guardados na sessão
     for ev in st.session_state.eventos_encontrados:
         h_ev = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
         st.warning(f"Encontrado: {h_ev}")
-        if st.button(f"CONFIRMAR CANCELAMENTO", key=f"del_{ev['id']}"):
+        # Botão final em VERMELHO conforme solicitado
+        if st.button(f"CANCELAR AGENDAMENTO", key=f"del_{ev['id']}"):
             service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
-            st.session_state.eventos_encontrados = [] # Limpa a busca
+            st.session_state.eventos_encontrados = []
             st.success("🗑️ CANCELADO COM SUCESSO!")
             st.rerun()
 
