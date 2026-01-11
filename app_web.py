@@ -4,7 +4,7 @@ import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# Configurações de Agenda
+# IDs das Agendas
 AGENDAS = {
     "Bruno": "b2f33326cb9d42ddf65423eed8332d70be96f8b21f18a902093ea432d1d523f5@group.calendar.google.com",
     "Duda": "7e95af6d94ea5bcf73f15c8dbc4ddc29fe544728219617478566bca73d05d7d4@group.calendar.google.com",
@@ -22,57 +22,14 @@ DURACOES = {
 st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="wide")
 fuso = pytz.timezone('America/Sao_Paulo')
 
-# =========================================================
-# DESIGN RESPONSIVO (ADAPTAÇÃO AUTOMÁTICA)
-# =========================================================
+# Estilo CSS (Mantido e Responsivo)
 st.markdown("""
     <style>
-    /* Fundo Adaptável */
-    .stApp {
-        background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), 
-        url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070");
-        background-size: cover; background-attachment: fixed;
-    }
-
-    /* Container Centralizado e Flexível */
-    [data-testid="stVerticalBlock"] > div:has(input, select, .stButton) { 
-        background: rgba(15, 15, 15, 0.95); 
-        border: 2px solid #D4AF37;
-        border-radius: 15px; 
-        padding: 5% !important;
-        margin: auto;
-        max-width: 800px; /* Limita largura em TVs e PCs */
-    }
-
-    /* Ajuste de Texto para todas as telas */
+    .stApp { background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070"); background-size: cover; background-attachment: fixed; }
+    [data-testid="stVerticalBlock"] > div:has(input, select, .stButton) { background: rgba(15, 15, 15, 0.95); border: 2px solid #D4AF37; border-radius: 15px; padding: 5% !important; margin: auto; max-width: 800px; }
     h1 { color: #D4AF37 !important; text-align: center; font-size: calc(1.8rem + 1.5vw) !important; }
-    h2, h3, h4 { color: white !important; text-align: center; }
-
-    /* Botões Grandes e Touch-Friendly (Celular) */
-    div.stButton > button { 
-        background-color: #D4AF37 !important; 
-        color: black !important; 
-        font-weight: bold; 
-        min-height: 60px;
-        font-size: 1.1rem !important;
-        border-radius: 12px;
-        border: none;
-        margin-bottom: 10px;
-    }
-
-    /* Botão Vermelho de Cancelar */
+    div.stButton > button { background-color: #D4AF37 !important; color: black !important; font-weight: bold; min-height: 60px; border-radius: 12px; }
     div.stButton > button[key^="del_"] { background-color: #cc0000 !important; color: white !important; }
-    
-    /* Mensagem de Confirmação Verde (Destaque) */
-    .stSuccess {
-        background-color: #28a745 !important;
-        color: white !important;
-        font-size: 1.2rem;
-        text-align: center;
-        border-radius: 10px;
-        padding: 20px;
-    }
-
     #MainMenu, footer, header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
@@ -91,49 +48,63 @@ def conectar():
 
 service = conectar()
 
-def get_status_dia(calendar_id, data):
+def verificar_disponibilidade(calendar_id, data, horario_texto):
+    """
+    Verifica se um horário específico (ex: '10:00') está livre, 
+    considerando bloqueios de qualquer duração na agenda.
+    """
     try:
+        # Define o momento exato que queremos testar
+        h_inicio = int(horario_texto.split(':')[0])
+        dt_teste = fuso.localize(datetime.combine(data, time(h_inicio, 0)))
+        
+        # Busca eventos no dia
         min_t = fuso.localize(datetime.combine(data, time.min)).isoformat()
         max_t = fuso.localize(datetime.combine(data, time.max)).isoformat()
         events = service.events().list(calendarId=calendar_id, timeMin=min_t, timeMax=max_t, singleEvents=True).execute().get('items', [])
-        ocupados = []
+        
         for ev in events:
-            if 'date' in ev['start']: return "BLOQUEADO"
-            start_dt = ev['start'].get('dateTime')
-            if start_dt:
-                ocupados.append(datetime.fromisoformat(start_dt).astimezone(fuso).strftime('%H:%M'))
-        return ocupados
-    except: return []
+            # 1. Bloqueio por Dia Inteiro
+            if 'date' in ev['start']:
+                return False
+            
+            # 2. Bloqueio por Horário (Evento com início e fim)
+            start_ev = datetime.fromisoformat(ev['start'].get('dateTime')).astimezone(fuso)
+            end_ev = datetime.fromisoformat(ev['end'].get('dateTime')).astimezone(fuso)
+            
+            # Se o nosso horário de teste estiver entre o início e o fim de um evento existente...
+            # Adicionamos uma margem de 1 minuto para evitar conflitos exatos nas bordas
+            if start_ev <= dt_teste < end_ev:
+                return False
+        
+        return True
+    except:
+        return False
 
-# Inicialização de Estados
+# Navegação
 if 'pagina' not in st.session_state: st.session_state.pagina = 'inicio'
 if 'confirmado' not in st.session_state: st.session_state.confirmado = False
 
-# --- TELA DE SUCESSO ---
 if st.session_state.confirmado:
     st.title("💈 AGENDAMENTO REALIZADO!")
-    st.success("✨ Seu horário foi confirmado na agenda do barbeiro com sucesso!")
-    if st.button("FAZER OUTRO AGENDAMENTO / VOLTAR"):
+    st.success("✨ Seu horário foi confirmado na agenda com sucesso!")
+    if st.button("VOLTAR AO INÍCIO"):
         st.session_state.confirmado = False
         st.session_state.pagina = 'inicio'
         st.rerun()
     st.stop()
 
-# --- TELA INICIAL ---
 st.title("💈 BARBER SHOP PREMIUM")
 
 if st.session_state.pagina == 'inicio':
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns(2)
     with col1:
-        if st.button("📅 AGENDAR NOVO HORÁRIO", use_container_width=True):
-            st.session_state.pagina = 'agendar'
-            st.rerun()
+        if st.button("📅 AGENDAR NOVO HORÁRIO"):
+            st.session_state.pagina = 'agendar'; st.rerun()
     with col2:
-        if st.button("❌ CANCELAR AGENDAMENTO", use_container_width=True):
-            st.session_state.pagina = 'cancelar'
-            st.rerun()
+        if st.button("❌ CANCELAR AGENDAMENTO"):
+            st.session_state.pagina = 'cancelar'; st.rerun()
 
-# --- FORMULÁRIO AGENDAMENTO ---
 elif st.session_state.pagina == 'agendar':
     if st.button("⬅ VOLTAR"): st.session_state.pagina = 'inicio'; st.rerun()
     
@@ -146,39 +117,36 @@ elif st.session_state.pagina == 'agendar':
     serv_nome = st.selectbox("Selecione o Serviço", list(DURACOES.keys()))
     data_sel = st.date_input("Escolha a Data", min_value=datetime.now(fuso).date())
     
-    status = get_status_dia(AGENDAS[prof], data_sel)
+    st.write("#### 🕒 Horários Disponíveis")
+    horarios_loja = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+    cols = st.columns(3)
     
-    if status == "BLOQUEADO":
-        st.error("🚫 O barbeiro não atenderá nesta data.")
-    else:
-        st.write("#### 🕒 Horários Disponíveis")
-        todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
-        # Grid responsiva: 3 colunas no PC, mas Streamlit ajusta no Celular
-        cols = st.columns(3)
-        for i, h in enumerate(todos):
-            with cols[i%3]:
-                if h in status: st.button(f"🚫 {h}", disabled=True, key=f"o_{h}")
-                else:
-                    if st.button(h, key=f"l_{h}", use_container_width=True):
-                        if nome and zap and senha:
-                            minutos = DURACOES[serv_nome]
-                            inicio = fuso.localize(datetime.combine(data_sel, time(int(h.split(':')[0]), 0)))
-                            fim = inicio + timedelta(minutes=minutos)
-                            corpo = {
-                                'summary': f"{serv_nome}: {nome}",
-                                'description': f"TEL: {zap} | SENHA: {senha}",
-                                'start': {'dateTime': inicio.isoformat()},
-                                'end': {'dateTime': fim.isoformat()}
-                            }
-                            service.events().insert(calendarId=AGENDAS[prof], body=corpo).execute()
-                            st.session_state.confirmado = True
-                            st.rerun()
-                        else: st.warning("Preencha todos os campos!")
+    for i, h in enumerate(horarios_loja):
+        with cols[i%3]:
+            # NOVA LÓGICA: Verifica se o horário está livre de qualquer evento
+            esta_livre = verificar_disponibilidade(AGENDAS[prof], data_sel, h)
+            
+            if not esta_livre:
+                st.button(f"🚫 {h}", disabled=True, key=f"o_{h}")
+            else:
+                if st.button(h, key=f"l_{h}", use_container_width=True):
+                    if nome and zap and senha:
+                        duracao = DURACOES[serv_nome]
+                        inicio = fuso.localize(datetime.combine(data_sel, time(int(h.split(':')[0]), 0)))
+                        fim = inicio + timedelta(minutes=duracao)
+                        corpo = {
+                            'summary': f"{serv_nome}: {nome}",
+                            'description': f"TEL: {zap} | SENHA: {senha}",
+                            'start': {'dateTime': inicio.isoformat()},
+                            'end': {'dateTime': fim.isoformat()}
+                        }
+                        service.events().insert(calendarId=AGENDAS[prof], body=corpo).execute()
+                        st.session_state.confirmado = True
+                        st.rerun()
+                    else: st.warning("Preencha todos os campos!")
 
-# --- FORMULÁRIO CANCELAMENTO ---
 elif st.session_state.pagina == 'cancelar':
     if st.button("⬅ VOLTAR"): st.session_state.pagina = 'inicio'; st.rerun()
-    
     c_zap = st.text_input("Telefone com o DDD", key="czap")
     c_senha = st.text_input("Senha cadastrada", type="password", key="csenha")
     c_barb = st.selectbox("Barbeiro", list(AGENDAS.keys()))
@@ -196,8 +164,7 @@ elif st.session_state.pagina == 'cancelar':
             if st.button(f"CANCELAR AGENDAMENTO", key=f"del_{ev['id']}"):
                 service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
                 st.session_state.meus_evs = []
-                st.success("🗑️ AGENDAMENTO CANCELADO!")
-                st.session_state.pagina = 'inicio'
-                st.rerun()
+                st.success("🗑️ CANCELADO!")
+                st.session_state.pagina = 'inicio'; st.rerun()
 
 st.markdown(f"""<div style="position:fixed; bottom:0; left:0; width:100%; text-align:center; background:rgba(0,0,0,0.9); padding:10px; border-top:1px solid #D4AF37; color:#D4AF37; font-size:12px;">BARBER SHOP PREMIUM © 2026 | Lucas Biazoto</div>""", unsafe_allow_html=True)
