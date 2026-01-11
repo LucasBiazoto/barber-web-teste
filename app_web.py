@@ -11,7 +11,6 @@ AGENDAS = {
     "Nenê": "6f51a443e21211459f88c6b6e2c6173c6be31d19e151d8d1a700e96c99519920@group.calendar.google.com"
 }
 
-# Duração oculta (apenas para a lógica da agenda)
 DURACOES = {
     "Corte": 30,
     "Corte e Barba": 60,
@@ -20,64 +19,58 @@ DURACOES = {
     "Corte Feminino": 90
 }
 
-st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="centered")
+st.set_page_config(page_title="Barber Shop Premium", page_icon="💈", layout="wide")
 fuso = pytz.timezone('America/Sao_Paulo')
 
 # =========================================================
-# ESTILO VISUAL (BOTÕES DE CARTÃO E QUADRO)
+# DESIGN RESPONSIVO (ADAPTAÇÃO AUTOMÁTICA)
 # =========================================================
 st.markdown("""
     <style>
+    /* Fundo Adaptável */
     .stApp {
-        background: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), 
+        background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), 
         url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=2070");
         background-size: cover; background-attachment: fixed;
     }
-    .stMarkdown p, label, .stWidgetLabel { color: white !important; font-weight: bold !important; text-shadow: 1px 1px 2px #000; }
-    
-    /* Quadro Principal */
-    div[data-testid="stVerticalBlock"] > div:has(input, select, .stButton) { 
-        background: rgba(15, 15, 15, 0.9); 
-        border: 2px solid #D4AF37;
-        border-radius: 20px; 
-        padding: 30px; 
-    }
-    
-    h1 { color: #D4AF37 !important; text-align: center; font-size: 2.8em; letter-spacing: 2px; }
 
-    /* Estilo dos Botões Iniciais (Menu Principal) */
-    .menu-btn {
-        display: block;
-        width: 100%;
-        padding: 40px 20px;
-        margin: 10px 0;
-        text-align: center;
-        background: rgba(212, 175, 55, 0.1);
+    /* Container Centralizado e Flexível */
+    [data-testid="stVerticalBlock"] > div:has(input, select, .stButton) { 
+        background: rgba(15, 15, 15, 0.95); 
         border: 2px solid #D4AF37;
-        color: #D4AF37;
-        font-size: 24px;
-        font-weight: bold;
-        border-radius: 15px;
-        transition: all 0.3s ease;
-        cursor: pointer;
+        border-radius: 15px; 
+        padding: 5% !important;
+        margin: auto;
+        max-width: 800px; /* Limita largura em TVs e PCs */
     }
 
-    /* Botão Dourado de Ação */
+    /* Ajuste de Texto para todas as telas */
+    h1 { color: #D4AF37 !important; text-align: center; font-size: calc(1.8rem + 1.5vw) !important; }
+    h2, h3, h4 { color: white !important; text-align: center; }
+
+    /* Botões Grandes e Touch-Friendly (Celular) */
     div.stButton > button { 
         background-color: #D4AF37 !important; 
         color: black !important; 
         font-weight: bold; 
-        height: 55px;
+        min-height: 60px;
+        font-size: 1.1rem !important;
         border-radius: 12px;
-        font-size: 18px;
         border: none;
+        margin-bottom: 10px;
     }
 
-    /* Botão VERMELHO de Cancelar Agendamento */
-    div.stButton > button[key^="del_"] { 
-        background-color: #cc0000 !important; 
+    /* Botão Vermelho de Cancelar */
+    div.stButton > button[key^="del_"] { background-color: #cc0000 !important; color: white !important; }
+    
+    /* Mensagem de Confirmação Verde (Destaque) */
+    .stSuccess {
+        background-color: #28a745 !important;
         color: white !important;
-        border: 2px solid white;
+        font-size: 1.2rem;
+        text-align: center;
+        border-radius: 10px;
+        padding: 20px;
     }
 
     #MainMenu, footer, header {visibility: hidden;}
@@ -112,38 +105,44 @@ def get_status_dia(calendar_id, data):
         return ocupados
     except: return []
 
-if 'pagina' not in st.session_state:
-    st.session_state.pagina = 'inicio'
+# Inicialização de Estados
+if 'pagina' not in st.session_state: st.session_state.pagina = 'inicio'
+if 'confirmado' not in st.session_state: st.session_state.confirmado = False
 
-st.title("💈 BARBER SHOP PREMIUM")
-
-# --- MENU INICIAL ---
-if st.session_state.pagina == 'inicio':
-    st.write("## Escolha uma opção:")
-    if st.button("📅 AGENDAR NOVO HORÁRIO", key="btn_ir_agendar"):
-        st.session_state.pagina = 'agendar'
-        st.rerun()
-    
-    st.write("") # Espaçamento
-    
-    if st.button("❌ CANCELAR AGENDAMENTO", key="btn_ir_cancelar"):
-        st.session_state.pagina = 'cancelar'
-        st.rerun()
-
-# --- FORMULÁRIO DE AGENDAMENTO ---
-elif st.session_state.pagina == 'agendar':
-    if st.button("⬅ VOLTAR AO MENU", key="voltar"):
+# --- TELA DE SUCESSO ---
+if st.session_state.confirmado:
+    st.title("💈 AGENDAMENTO REALIZADO!")
+    st.success("✨ Seu horário foi confirmado na agenda do barbeiro com sucesso!")
+    if st.button("FAZER OUTRO AGENDAMENTO / VOLTAR"):
+        st.session_state.confirmado = False
         st.session_state.pagina = 'inicio'
         st.rerun()
+    st.stop()
 
-    st.write("### 📅 NOVO AGENDAMENTO")
+# --- TELA INICIAL ---
+st.title("💈 BARBER SHOP PREMIUM")
+
+if st.session_state.pagina == 'inicio':
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("📅 AGENDAR NOVO HORÁRIO", use_container_width=True):
+            st.session_state.pagina = 'agendar'
+            st.rerun()
+    with col2:
+        if st.button("❌ CANCELAR AGENDAMENTO", use_container_width=True):
+            st.session_state.pagina = 'cancelar'
+            st.rerun()
+
+# --- FORMULÁRIO AGENDAMENTO ---
+elif st.session_state.pagina == 'agendar':
+    if st.button("⬅ VOLTAR"): st.session_state.pagina = 'inicio'; st.rerun()
+    
     nome = st.text_input("Nome ou apelido")
-    col1, col2 = st.columns(2)
-    with col1: zap = st.text_input("Telefone com o DDD")
-    with col2: senha = st.text_input("Crie uma senha", type="password")
+    colA, colB = st.columns(2)
+    with colA: zap = st.text_input("Telefone com o DDD")
+    with colB: senha = st.text_input("Crie uma senha", type="password")
     
     prof = st.selectbox("Escolha o Barbeiro", list(AGENDAS.keys()))
-    # Nomes dos serviços limpos (sem minutos no texto)
     serv_nome = st.selectbox("Selecione o Serviço", list(DURACOES.keys()))
     data_sel = st.date_input("Escolha a Data", min_value=datetime.now(fuso).date())
     
@@ -154,18 +153,17 @@ elif st.session_state.pagina == 'agendar':
     else:
         st.write("#### 🕒 Horários Disponíveis")
         todos = ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+        # Grid responsiva: 3 colunas no PC, mas Streamlit ajusta no Celular
         cols = st.columns(3)
         for i, h in enumerate(todos):
             with cols[i%3]:
                 if h in status: st.button(f"🚫 {h}", disabled=True, key=f"o_{h}")
                 else:
-                    if st.button(h, key=f"l_{h}"):
+                    if st.button(h, key=f"l_{h}", use_container_width=True):
                         if nome and zap and senha:
-                            # Aqui o sistema usa os minutos corretos nos bastidores
                             minutos = DURACOES[serv_nome]
                             inicio = fuso.localize(datetime.combine(data_sel, time(int(h.split(':')[0]), 0)))
                             fim = inicio + timedelta(minutes=minutos)
-                            
                             corpo = {
                                 'summary': f"{serv_nome}: {nome}",
                                 'description': f"TEL: {zap} | SENHA: {senha}",
@@ -173,41 +171,33 @@ elif st.session_state.pagina == 'agendar':
                                 'end': {'dateTime': fim.isoformat()}
                             }
                             service.events().insert(calendarId=AGENDAS[prof], body=corpo).execute()
-                            st.success(f"✅ Reservado: {h}!")
-                            st.session_state.pagina = 'inicio'
+                            st.session_state.confirmado = True
                             st.rerun()
                         else: st.warning("Preencha todos os campos!")
 
-# --- FORMULÁRIO DE CANCELAMENTO ---
+# --- FORMULÁRIO CANCELAMENTO ---
 elif st.session_state.pagina == 'cancelar':
-    if st.button("⬅ VOLTAR AO MENU", key="voltar"):
-        st.session_state.pagina = 'inicio'
-        st.rerun()
-
-    st.write("### ❌ CANCELAR AGENDAMENTO")
+    if st.button("⬅ VOLTAR"): st.session_state.pagina = 'inicio'; st.rerun()
+    
     c_zap = st.text_input("Telefone com o DDD", key="czap")
     c_senha = st.text_input("Senha cadastrada", type="password", key="csenha")
-    c_barb = st.selectbox("Barbeiro do agendamento", list(AGENDAS.keys()), key="cbarb")
+    c_barb = st.selectbox("Barbeiro", list(AGENDAS.keys()))
     
-    if 'eventos_encontrados' not in st.session_state:
-        st.session_state.eventos_encontrados = []
-
     if st.button("🔍 BUSCAR MEU HORÁRIO"):
         agora = datetime.now(fuso).isoformat()
         evs = service.events().list(calendarId=AGENDAS[c_barb], timeMin=agora, singleEvents=True).execute().get('items', [])
-        st.session_state.eventos_encontrados = [e for e in evs if f"TEL: {c_zap}" in e.get('description', '') and f"SENHA: {c_senha}" in e.get('description', '')]
-        
-        if not st.session_state.eventos_encontrados:
-            st.error("Nenhum agendamento encontrado.")
+        st.session_state.meus_evs = [e for e in evs if f"TEL: {c_zap}" in e.get('description','') and f"SENHA: {c_senha}" in e.get('description','')]
+        if not st.session_state.meus_evs: st.error("Nenhum agendamento encontrado.")
 
-    for ev in st.session_state.eventos_encontrados:
-        h_ev = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
-        st.warning(f"Reserva: {h_ev}")
-        # Botão Vermelho conforme solicitado
-        if st.button(f"CANCELAR AGENDAMENTO", key=f"del_{ev['id']}"):
-            service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
-            st.session_state.eventos_encontrados = []
-            st.success("🗑️ AGENDAMENTO CANCELADO!")
-            st.rerun()
+    if 'meus_evs' in st.session_state:
+        for ev in st.session_state.meus_evs:
+            h_ev = datetime.fromisoformat(ev['start']['dateTime']).astimezone(fuso).strftime('%d/%m às %H:%M')
+            st.warning(f"Reserva: {h_ev}")
+            if st.button(f"CANCELAR AGENDAMENTO", key=f"del_{ev['id']}"):
+                service.events().delete(calendarId=AGENDAS[c_barb], eventId=ev['id']).execute()
+                st.session_state.meus_evs = []
+                st.success("🗑️ AGENDAMENTO CANCELADO!")
+                st.session_state.pagina = 'inicio'
+                st.rerun()
 
-st.markdown(f"""<div style="position:fixed; bottom:0; width:100%; text-align:center; background:rgba(0,0,0,0.95); padding:10px; border-top:1px solid #D4AF37; color:#D4AF37; font-weight:bold;">BARBER SHOP PREMIUM © 2026 | Desenvolvido por Lucas Biazoto</div>""", unsafe_allow_html=True)
+st.markdown(f"""<div style="position:fixed; bottom:0; left:0; width:100%; text-align:center; background:rgba(0,0,0,0.9); padding:10px; border-top:1px solid #D4AF37; color:#D4AF37; font-size:12px;">BARBER SHOP PREMIUM © 2026 | Lucas Biazoto</div>""", unsafe_allow_html=True)
